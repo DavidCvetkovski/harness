@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Entry point. Keeps the package importable without installing anything.
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PYTHONPATH="$DIR:${PYTHONPATH:-}"
+# The search backend lives in the llama.cpp venv rather than system Python.
+for site in "$HOME"/llm/.venv/lib/python*/site-packages; do
+    [ -d "$site" ] && export PYTHONPATH="$PYTHONPATH:$site"
+done
+exec python3 -m harness.cli "$@"
