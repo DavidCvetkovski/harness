@@ -5,6 +5,7 @@ Settings, presets, automations, the access token, and which model is chosen.
 All of it is safe to edit by hand.
 """
 
+import contextlib
 import datetime
 import json
 import os
@@ -45,7 +46,7 @@ DEFAULTS = {
     "max_steps": 8,
     # Tools can be switched off individually. A 3B model degrades as the tool
     # list grows, so trimming this is a real tuning knob, not decoration.
-    "tools": {name: True for name in TOOL_NAMES},
+    "tools": dict.fromkeys(TOOL_NAMES, True),
     # Extra commands to treat as read-only, on top of the built-in allow-list.
     "extra_safe_commands": [],
     # When to stop and ask. Protected system paths are refused whatever these
@@ -423,8 +424,6 @@ def access_token():
 
 
 def rotate_token():
-    try:
+    with contextlib.suppress(OSError):
         os.remove(TOKEN_FILE)
-    except OSError:
-        pass
     return access_token()

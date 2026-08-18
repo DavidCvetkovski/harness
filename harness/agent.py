@@ -14,6 +14,7 @@ same code runs `harness chat` and the browser, so a fix lands in both.
 """
 
 import argparse
+import contextlib
 import datetime
 import http.client
 import json
@@ -220,7 +221,11 @@ def list_sessions():
                 os.path.join(settings.SESSION_DIR, name), None)
             if session:
                 found.append(session)
-    return sorted(found, key=lambda s: s.get("updated", ""), reverse=True)
+    # Tie-broken on the id, which is a timestamp, so two sessions saved in the
+    # same second still come back in a stable order rather than in whatever
+    # order the directory happened to be read in. "latest" depends on this.
+    return sorted(found, key=lambda s: (s.get("updated", ""), s.get("id", "")),
+                  reverse=True)
 
 
 def load_session(session_id):
@@ -448,10 +453,8 @@ def stream(messages, cfg, sink, use_tools=True):
                 # Leaving the block closes the socket, which tells llama.cpp to
                 # abandon the generation too.
                 if sink.cancelled():
-                    try:
+                    with contextlib.suppress(Exception):
                         response.close()
-                    except Exception:
-                        pass
                     break
                 line = raw.decode("utf-8", errors="replace").strip()
                 if not line.startswith("data: "):

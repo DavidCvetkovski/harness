@@ -1,2 +1,7 @@
-ddgs
-qrcode
+# Harness needs none of these to run. The agent loop, the server, the tools and
+# the tests are all standard library — which is why `bin/harness` works on a
+# fresh macOS with nothing installed.
+#
+# These two buy optional conveniences:
+ddgs      # web search without an API key (harness deps)
+qrcode    # the QR code for pairing a phone

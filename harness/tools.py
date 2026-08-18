@@ -11,6 +11,7 @@ page says, so treat its conclusions with the same suspicion you would treat the
 page itself.
 """
 
+import contextlib
 import json
 import os
 import re
@@ -250,7 +251,7 @@ def read_file(args, cfg, sink):
     count = _whole_number(args.get("num_lines", 100), 100, 1, 500)
 
     try:
-        with open(path, "r", errors="replace") as handle:
+        with open(path, errors="replace") as handle:
             lines = handle.readlines()
     except OSError as exc:
         return f"Error: {exc}"
@@ -324,7 +325,7 @@ def edit_file(args, cfg, sink):
         return f"Error: not a file: {path}"
 
     try:
-        with open(path, "r", errors="replace") as handle:
+        with open(path, errors="replace") as handle:
             original = handle.read()
     except OSError as exc:
         return f"Error: {exc}"
@@ -372,10 +373,9 @@ def run_command(args, cfg, sink):
         if not confirm_secret(token, sink, "Run a command that reads"):
             return "Error: the user declined to run this command."
 
-    if needs_confirmation(command, cfg):
-        if not sink.confirm("Allow this command?", f"\n  RUN  {command}",
-                            "run_command"):
-            return "Error: the user declined to run this command."
+    if needs_confirmation(command, cfg) and not sink.confirm(
+            "Allow this command?", f"\n  RUN  {command}", "run_command"):
+        return "Error: the user declined to run this command."
 
     if sink and sink.cancelled():
         return "Error: command execution cancelled by user."
@@ -393,17 +393,13 @@ def run_command(args, cfg, sink):
         deadline = time.time() + 30
         while time.time() < deadline:
             if sink and sink.cancelled():
-                try:
+                with contextlib.suppress(OSError):
                     os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                except OSError:
-                    pass
                 try:
                     proc.wait(timeout=1)
                 except subprocess.TimeoutExpired:
-                    try:
+                    with contextlib.suppress(OSError):
                         os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                    except OSError:
-                        pass
                 return "Error: command execution cancelled by user."
             try:
                 out, err = proc.communicate(timeout=0.2)
@@ -413,10 +409,8 @@ def run_command(args, cfg, sink):
             except subprocess.TimeoutExpired:
                 continue
         else:
-            try:
+            with contextlib.suppress(OSError):
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except OSError:
-                pass
             return "Error: command timed out after 30s"
     except Exception as exc:
         return f"Error executing command: {exc}"

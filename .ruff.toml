@@ -1,0 +1,21 @@
+# Close to the defaults on purpose. Everything here is either a rule this
+# codebase actively wants, or an exception that says why it exists.
+line-length = 96
+target-version = "py39"
+
+[lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "W",    # warnings
+    "B",    # bugbear — mutable defaults, except-without-from, and friends
+    "UP",   # pyupgrade
+    "C4",   # comprehension clarity
+    "SIM",  # simplifications
+]
+
+[lint.per-file-ignores]
+# Two docstrings quote things that cannot be wrapped without becoming wrong:
+# a literal <tool_call> line as a model emits it, and a sample of exported
+# markdown. Breaking either would misrepresent what the code is describing.
+"harness/agent.py" = ["E501"]

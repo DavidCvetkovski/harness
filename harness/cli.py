@@ -11,6 +11,7 @@ harness.cli — one command for the whole thing.
 """
 
 import argparse
+import contextlib
 import os
 import signal
 import subprocess
@@ -123,16 +124,12 @@ def do_stop():
 
     for pid in target_pids:
         if pids_alive(pid):
-            try:
+            with contextlib.suppress(OSError):
                 os.kill(pid, signal.SIGKILL)
-            except OSError:
-                pass
 
     for pid in pids("caffeinate -i"):
-        try:
+        with contextlib.suppress(OSError):
             os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
 
     print("stopped: " + ", ".join(stopped))
 

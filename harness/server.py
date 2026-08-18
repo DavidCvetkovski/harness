@@ -12,6 +12,7 @@ The model server must already be running (harness model).
 """
 
 import argparse
+import contextlib
 import json
 import os
 import queue
@@ -45,6 +46,17 @@ APP_PROCESS = r"harness\.(server|cli serve)"
 REQUIRE_TOKEN = False
 # Set when --remote pins the server to a single Tailscale address.
 SERVE_HOST = ""
+
+# Seconds between SSE keep-alive comments on an idle chat stream. This is what
+# detects a browser that went away without closing its socket — a phone that
+# slept, a tailnet that dropped — because writing to it is the only way to find
+# out. Short enough to notice quickly, long enough to be free.
+HEARTBEAT = 15
+
+# How long an approval may wait for an answer. Not a timeout in any meaningful
+# sense: the heartbeat above is what catches an absent browser. This only stops
+# a forgotten tab from holding a thread open indefinitely.
+APPROVAL_BACKSTOP = 12 * 3600
 
 
 # --------------------------------------------------------------------------
@@ -223,10 +235,8 @@ def write_autostart(enable):
     """Install or remove the login agent that keeps Harness running."""
     if not enable:
         shell("launchctl", "unload", AGENT_PLIST)
-        try:
+        with contextlib.suppress(OSError):
             os.remove(AGENT_PLIST)
-        except OSError:
-            pass
         return True
 
     # HERE is the package dir, so bin/ is one level up — not two.
@@ -333,9 +343,23 @@ class WebSink(agent.Sink):
 
     def confirm(self, question, detail="", kind=""):
         """
-        Send the preview to the UI, then block until the user clicks Allow or
-        Deny. Times out into a refusal — a browser tab closed mid-approval must
-        not leave the request hanging forever, and refusing is the safe default.
+        Send the preview to the UI, then wait for the user to click Allow or
+        Deny.
+
+        It waits as long as the browser is still there. It used to give up
+        after five minutes, which sounds generous until you watch a real turn:
+        generation runs at a couple of tokens a second, a turn that writes
+        three files takes the better part of an hour, and the person who asked
+        for it has quite reasonably gone to do something else. Coming back to
+        three refusals — of work the model had already done — is the worst
+        possible outcome, because refusing is meant to be the *safe* default,
+        not the likely one.
+
+        What the old timeout was really for was the tab that goes away without
+        closing its socket. That is now the heartbeat's job (see chat()), which
+        notices a dead client within seconds and releases the approvals it was
+        blocking. The backstop below is only there so a wait cannot outlive
+        the day it started in.
         """
         if kind and kind in granted.get(self.session_id, ()):
             return True
@@ -348,7 +372,13 @@ class WebSink(agent.Sink):
 
         self.emit("approval", id=approval_id, question=question, kind=kind,
                   detail=detail.strip("\n"))
-        answered = record["event"].wait(timeout=300)
+
+        # Waited in slices rather than one long block, so that stopping the
+        # turn stops the asking too.
+        deadline = time.monotonic() + APPROVAL_BACKSTOP
+        answered = False
+        while not answered and time.monotonic() < deadline and not self.stopped:
+            answered = record["event"].wait(timeout=1.0)
 
         with approvals_lock:
             approvals.pop(approval_id, None)
@@ -597,10 +627,8 @@ def _cancel(handler):
     # Closing the socket to llama-server is what makes it abandon the
     # generation, rather than finishing it into a queue nobody is reading.
     if sink.active_response:
-        try:
+        with contextlib.suppress(Exception):
             sink.active_response.close()
-        except Exception:                                     # noqa: BLE001
-            pass
     release_approvals(sink)
     return {"ok": True}
 
@@ -856,17 +884,28 @@ class Handler(BaseHTTPRequestHandler):
         threading.Thread(target=worker, daemon=True).start()
 
         while True:
-            event = channel.get()
+            # A turn can legitimately go minutes without producing an event —
+            # a slow tool, or an approval nobody has answered yet. Rather than
+            # block on the queue forever, wake up periodically and write a
+            # comment down the pipe. If the browser has gone, that write is
+            # what tells us, and it is the only thing that can.
             try:
-                self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+                event = channel.get(timeout=HEARTBEAT)
+                payload = f"data: {json.dumps(event)}\n\n"
+            except queue.Empty:
+                event, payload = None, ": ping\n\n"
+
+            try:
+                self.wfile.write(payload.encode())
                 self.wfile.flush()
-            except (BrokenPipeError, ConnectionResetError):
+            except (BrokenPipeError, ConnectionResetError, OSError):
                 # Tab closed. Stop the turn and release anything it is blocked
                 # on, so the thread can finish instead of waiting forever.
                 sink.stopped = True
                 release_approvals(sink)
                 return
-            if event["type"] == "done":
+
+            if event and event["type"] == "done":
                 return
 
 
@@ -941,9 +980,12 @@ def main():
             raise
         # A stray copy from a previous run is the usual cause, and the raw
         # traceback buries that under nine frames of socketserver internals.
-        raise SystemExit(f"Port {PORT} is already in use.\n"
-                         f"  Another copy is probably still running:  harness stop\n"
-                         f"  Or pick a different port:  harness --port {PORT + 1}")
+        # `from None`: the socket traceback is noise next to the one line
+        # that actually helps.
+        raise SystemExit(
+            f"Port {PORT} is already in use.\n"
+            f"  Another copy is probably still running:  harness stop\n"
+            f"  Or pick a different port:  harness --port {PORT + 1}") from None
 
     print(f"Harness  ->  http://127.0.0.1:{PORT}")
     if len(binds) > 1:
