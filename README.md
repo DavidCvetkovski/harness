@@ -7,7 +7,7 @@ leaves it. Nothing you type is sent to anyone.
 [![tests](https://github.com/DavidCvetkovski/harness/actions/workflows/tests.yml/badge.svg)](https://github.com/DavidCvetkovski/harness/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![dependencies: none](https://img.shields.io/badge/dependencies-none-brightgreen.svg)](requirements.txt)
+[![core dependencies: none](https://img.shields.io/badge/core%20dependencies-none-brightgreen.svg)](requirements.txt)
 
 ![A conversation in Harness: the question, the collapsed thought, the tool it ran and what came back, then the answer](docs/conversation.png)
 
@@ -72,6 +72,20 @@ Reasoning is streamed into a panel of its own. It stays in the transcript
 afterwards, collapsed to a line, so you can go back and read why it did what it
 did — which is usually more interesting than the answer.
 
+## It can speak in your voice
+
+An optional sidecar clones your voice from about fifteen seconds of you reading
+a paragraph aloud, and reads answers back in it. Record several — bored, awake,
+whatever — name them, and pick which one speaks.
+
+It runs as its own process in its own virtual environment, because the model
+needs PyTorch and that is around 2.5 GB. Harness talks to it over HTTP and does
+nothing differently when it is absent: the Speak button simply is not there.
+That is why the badge above says *core* dependencies.
+
+Everything stays on the machine — the model, the recordings, the synthesis.
+See [voice/README.md](voice/README.md).
+
 ## Safety
 
 Seven tools: list files, read, write, edit, search the web, fetch a page, run a
@@ -108,7 +122,7 @@ browser's share menu and it opens without the Safari chrome.
 python3 -m unittest discover -s tests -t .
 ```
 
-109 tests, no test framework to install — the suite is standard library, like
+129 tests, no test framework to install — the suite is standard library, like
 the rest of the project. Most of them are about the guards: what a protected
 path is, which commands stop and ask, that a refusal really does leave the disk
 alone, and that one client cancelling a turn cannot silently refuse an approval
@@ -130,6 +144,7 @@ harness/
   config.py          settings, presets, automations, access token
   ui.html            the whole front end, one file
   model.sh           llama.cpp launcher
+voice/               optional voice sidecar — its own process, its own venv
 tests/               the guards, the loop, sessions, scheduling, concurrency
 ```
 
@@ -144,6 +159,7 @@ logs. Models live in `~/llm/models/`.
 - Python 3.9+ — and nothing else, to run or to test
 - Optional: `ddgs` for web search, `qrcode` for the phone QR (`bin/harness deps`)
 - Optional: Tailscale, for `--remote`
+- Optional: PyTorch and ~1.6 GB of weights, for the voice sidecar only
 
 ## Notes
 

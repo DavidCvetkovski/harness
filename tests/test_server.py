@@ -123,6 +123,48 @@ class ApprovalScoping(unittest.TestCase):
         self.assertEqual(answer.get("result"), False)
 
 
+class VoiceProxy(unittest.TestCase):
+    """
+    Harness relays voice requests rather than letting the browser call the
+    sidecar directly — on a phone, 127.0.0.1 is the phone, and the sidecar is
+    on the Mac.
+    """
+
+    class FakeHandler:
+        """Just enough of the real handler for the proxy to talk to."""
+
+        def __init__(self, body=b""):
+            self._body = body
+            self.sent = None
+
+        def body_bytes(self):
+            return self._body
+
+        def send(self, code, payload, content_type="application/json", **headers):
+            self.sent = (code, payload, content_type, headers)
+            return self.sent
+
+    def test_a_sidecar_that_is_not_running_is_reported_not_raised(self):
+        # Not running is the normal state for most installs. The UI hides the
+        # voice controls when it sees this, so it must not be an exception.
+        original = server.VOICE_URL
+        server.VOICE_URL = "http://127.0.0.1:9"       # discard port, always refused
+        try:
+            handler = self.FakeHandler()
+            code, payload, _, _ = server.voice_proxy(handler, "GET", "/voices")
+        finally:
+            server.VOICE_URL = original
+        self.assertEqual(code, 503)
+        self.assertIn("not running", payload["error"])
+        self.assertIn("voice/server.py", payload["hint"])
+
+    def test_the_request_body_is_relayed_untouched(self):
+        # The proxy must not parse or rewrite what it forwards; the sidecar
+        # owns that contract.
+        handler = self.FakeHandler(b'{"text": "hello"}')
+        self.assertEqual(handler.body_bytes(), b'{"text": "hello"}')
+
+
 class QuietRuns(unittest.TestCase):
     """A scheduled run has nobody to approve anything."""
 

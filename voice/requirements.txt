@@ -1,0 +1,9 @@
+# The voice sidecar's dependencies — deliberately NOT the main project's.
+# Harness itself still runs on the standard library alone; it only ever talks
+# to this over HTTP, and does nothing at all if it is not running.
+torch>=2.5
+torchaudio>=2.5
+transformers>=4.57,<5
+soundfile>=0.12
+safetensors>=0.4
+huggingface_hub>=0.26

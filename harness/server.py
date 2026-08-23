@@ -53,6 +53,13 @@ SERVE_HOST = ""
 # out. Short enough to notice quickly, long enough to be free.
 HEARTBEAT = 15
 
+# The optional voice sidecar (voice/server.py), if it is running. Requests are
+# proxied through this server rather than called directly from the browser: on
+# a phone, 127.0.0.1 is the phone, and the sidecar is on the Mac. Proxying also
+# means the browser never needs to know the sidecar exists.
+VOICE_URL = "http://127.0.0.1:8421"
+VOICE_TIMEOUT = 600      # synthesis runs slower than real time
+
 # How long an approval may wait for an answer. Not a timeout in any meaningful
 # sense: the heartbeat above is what catches an absent browser. This only stops
 # a forgotten tab from holding a thread open indefinitely.
@@ -666,6 +673,33 @@ def _system_action(handler):
     return {"ok": True}
 
 
+def voice_proxy(handler, method, path):
+    """
+    Relay one request to the voice sidecar, or explain that it is not running.
+
+    Kept deliberately dumb — it forwards bytes and a content type and takes no
+    view on what they mean. The sidecar owns the voice API; this only makes it
+    reachable from wherever Harness itself is reachable.
+    """
+    body = handler.body_bytes() if method in ("POST", "DELETE") else None
+    request = urllib.request.Request(
+        VOICE_URL + path, data=body, method=method,
+        headers={"Content-Type": "application/json"} if body else {})
+    try:
+        with urllib.request.urlopen(request, timeout=VOICE_TIMEOUT) as response:
+            payload = response.read()
+            kind = response.headers.get("Content-Type", "application/json")
+            cached = response.headers.get("X-Harness-Cached", "")
+        return handler.send(200, payload, kind, X_Harness_Cached=cached)
+    except urllib.error.HTTPError as exc:
+        return handler.send(exc.code, exc.read(), "application/json")
+    except (urllib.error.URLError, OSError):
+        # Not running is a normal state, not an error: the UI hides the voice
+        # controls when it sees this rather than showing something broken.
+        return handler.send(503, {"error": "voice sidecar is not running",
+                                  "hint": "python3 voice/server.py"})
+
+
 # --------------------------------------------------------------------------
 # HTTP
 # --------------------------------------------------------------------------
@@ -688,12 +722,21 @@ class Handler(BaseHTTPRequestHandler):
         see do_POST for why it has to be cleared per request.
         """
         if getattr(self, "_body", None) is None:
-            length = int(self.headers.get("Content-Length", 0))
+            # Via body_bytes so the socket is read exactly once however the
+            # body is wanted — parsed here, or raw by the voice proxy.
+            raw = self.body_bytes()
             try:
-                self._body = json.loads(self.rfile.read(length)) if length else {}
+                self._body = json.loads(raw) if raw else {}
             except json.JSONDecodeError:
                 self._body = {}
         return self._body
+
+    def body_bytes(self):
+        """The raw request body, for relaying somewhere else unparsed."""
+        if getattr(self, "_raw", None) is None:
+            length = int(self.headers.get("Content-Length", 0))
+            self._raw = self.rfile.read(length) if length else b""
+        return self._raw
 
     def send(self, code, payload, content_type="application/json", **headers):
         if isinstance(payload, (dict, list)):
@@ -778,15 +821,30 @@ class Handler(BaseHTTPRequestHandler):
         # last request's parsed body is still on `self` — clear it or this
         # request reads that one and leaves its own bytes in the socket.
         self._body = None
+        self._raw = None
         # And read it here even for routes that ignore it. Left unread it
         # becomes the start of the next request on the connection, surfacing
         # later as a bewildering 501 whose "method" is a fragment of JSON.
         self.body()
-        if self.path.split("?")[0] == "/api/chat":
+        path = self.path.split("?")[0]
+        if path == "/api/chat":
             if not self.authorised():
                 return self.deny()
             return self.chat()
+        if path.startswith("/api/voice/"):
+            if not self.authorised():
+                return self.deny()
+            return voice_proxy(self, "POST", path[len("/api/voice"):])
         self.handle_route(POST)
+
+    def do_DELETE(self):
+        self._raw = None
+        path = (self.path or "/").split("?")[0]
+        if path.startswith("/api/voice/"):
+            if not self.authorised():
+                return self.deny()
+            return voice_proxy(self, "DELETE", path[len("/api/voice"):])
+        self.send(404, {"error": "not found"})
 
     def do_GET(self):
         path = (self.path or "/").split("?")[0]
@@ -812,6 +870,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_file("icon.svg" if svg else "icon-180.png",
                                   "image/svg+xml" if svg else "image/png",
                                   Cache_Control="public, max-age=604800")
+
+        if path.startswith("/api/voice/"):
+            if not self.authorised():
+                return self.deny()
+            return voice_proxy(self, "GET", path[len("/api/voice"):])
 
         if path.startswith("/api/session/"):
             if not self.authorised():

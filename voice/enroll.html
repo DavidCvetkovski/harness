@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness — your voice</title>
+<style>
+:root{
+  --ink:#0b0d0c; --panel:#111514; --panel-2:#161b19;
+  --line:#232a27; --line-hot:#2f3a35;
+  --text:#d8ded9; --dim:#7d8a83; --faint:#4d5751;
+  --amber:#e8a33d; --amber-dim:#8c6427; --sage:#8fbf7f; --rust:#d4614a;
+  --mono:"SF Mono",SFMono-Regular,Menlo,monospace;
+  --face:Futura,"Avenir Next Condensed","Avenir Next",sans-serif;
+  --read:"Iowan Old Style",Palatino,Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--ink);color:var(--text);font-family:var(--mono);font-size:13px;
+  line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh;
+  padding:40px 20px 80px;
+}
+.col{max-width:660px;margin:0 auto}
+h1{font-family:var(--face);font-size:22px;letter-spacing:.28em;text-transform:uppercase;
+   color:var(--dim);font-weight:500;margin-bottom:10px}
+.lede{color:var(--faint);font-size:12px;line-height:1.85;margin-bottom:32px}
+.step{
+  border:1px solid var(--line);background:var(--panel);padding:20px;margin-bottom:14px;
+}
+.step.done{border-color:var(--amber-dim)}
+.n{
+  font-family:var(--face);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:14px;display:flex;align-items:center;gap:9px;
+}
+.step.done .n{color:var(--amber)}
+.n .tick{color:var(--sage)}
+.script{
+  font-family:var(--read);font-size:18px;line-height:1.75;color:var(--text);
+  background:var(--ink);border-left:2px solid var(--amber-dim);padding:16px 18px;
+}
+.row{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+button{
+  font-family:var(--face);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  padding:11px 20px;border:1px solid var(--line-hot);background:transparent;
+  color:var(--dim);cursor:pointer;transition:.15s;
+}
+button:hover:not(:disabled){border-color:var(--amber);color:var(--amber)}
+button:disabled{opacity:.35;cursor:not-allowed}
+button.go{background:var(--amber);border-color:var(--amber);color:var(--ink)}
+button.go:hover:not(:disabled){filter:brightness(1.12);color:var(--ink)}
+button.rec{border-color:var(--rust);color:var(--rust)}
+.meter{flex:1;min-width:140px;height:3px;background:var(--line);position:relative;overflow:hidden}
+.meter i{position:absolute;inset:0 100% 0 0;background:var(--sage);transition:right .06s linear}
+.clock{font-size:12px;color:var(--faint);min-width:74px;letter-spacing:.06em}
+.clock.good{color:var(--sage)}
+.clock.over{color:var(--amber)}
+textarea{
+  width:100%;background:var(--ink);border:1px solid var(--line);color:var(--text);
+  font-family:var(--mono);font-size:12.5px;line-height:1.7;padding:12px;
+  resize:vertical;min-height:96px;outline:none;margin-top:6px;
+}
+textarea:focus{border-color:var(--amber-dim)}
+audio{width:100%;margin-top:14px;filter:invert(.88) hue-rotate(180deg)}
+.note{color:var(--faint);font-size:11px;line-height:1.7;margin-top:12px}
+.msg{margin-top:14px;font-size:12px;padding:11px 13px;display:none}
+.msg.on{display:block}
+.msg.ok{color:var(--sage);border:1px solid rgba(143,191,127,.4);background:rgba(143,191,127,.06)}
+.msg.bad{color:var(--rust);border:1px solid rgba(212,97,74,.4);background:rgba(212,97,74,.06)}
+.msg.busy{color:var(--amber);border:1px solid var(--amber-dim);background:rgba(232,163,61,.05)}
+code{background:var(--panel-2);border:1px solid var(--line);padding:1px 5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="col">
+  <h1>Your voice</h1>
+  <p class="lede">
+    Read the paragraph below aloud, once, at your normal pace. About fifteen
+    seconds is ideal — the model needs enough to characterise how you sound, and
+    a long or noisy clip makes the result worse rather than better.<br><br>
+    Nothing leaves this machine. The recording is written to
+    <code>~/.harness/voice/</code> and used only as a reference for synthesis.
+  </p>
+
+  <div class="step" id="s1">
+    <div class="n"><span id="t1"></span>Step one — read this aloud</div>
+    <div class="script" id="script">Loading…</div>
+    <div class="row">
+      <button id="rec" class="go">Start recording</button>
+      <div class="meter"><i id="level"></i></div>
+      <span class="clock" id="clock">0.0s</span>
+    </div>
+    <div class="note" id="hint">Your browser will ask for microphone access.</div>
+  </div>
+
+  <div class="step" id="s2">
+    <div class="n"><span id="t2"></span>Step two — check it back</div>
+    <audio id="preview" controls></audio>
+    <div class="note">
+      If you stumbled or changed a word, either record again or correct the text
+      below so it matches exactly what you said. A transcript that disagrees with
+      the audio is the most common cause of a poor clone.
+    </div>
+    <textarea id="transcript" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="save" class="go" disabled>Save this voice</button>
+      <button id="again" disabled>Record again</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="step" id="s3">
+    <div class="n"><span id="t3"></span>Step three — hear it speak</div>
+    <div class="note" style="margin-top:0">
+      Type anything and it will be spoken in your voice. The first request loads
+      the model, so it takes a few seconds longer than the rest.
+    </div>
+    <textarea id="test" spellcheck="false">Harness can speak now. This is my own voice, running entirely on my laptop.</textarea>
+    <div class="row">
+      <button id="say" disabled>Speak it</button>
+      <span class="clock" id="saystat"></span>
+    </div>
+    <audio id="out" controls style="display:none"></audio>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const API = location.origin;
+
+let recorder = null, chunks = [], sampleRate = 48000, recordedWav = null;
+
+// ---------- recording ----------
+// Raw PCM through the Web Audio graph, encoded to WAV here. MediaRecorder would
+// hand back webm/opus or mp4/aac, and decoding either on the server means
+// depending on ffmpeg — which this project does not, and should not, need.
+function encodeWav(samples, rate){
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const put = (offset, text) => [...text].forEach((c, i) =>
+    view.setUint8(offset + i, c.charCodeAt(0)));
+  put(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+  put(8, 'WAVEfmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  put(36, 'data'); view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++){
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Uint8Array(buffer);
+}
+
+async function startRecording(){
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}
+  });
+  const context = new AudioContext();
+  sampleRate = context.sampleRate;
+  const source = context.createMediaStreamSource(stream);
+  const node = context.createScriptProcessor(4096, 1, 1);
+  chunks = [];
+  const started = performance.now();
+
+  node.onaudioprocess = event => {
+    const input = event.inputBuffer.getChannelData(0);
+    chunks.push(new Float32Array(input));
+    let peak = 0;
+    for (let i = 0; i < input.length; i++) peak = Math.max(peak, Math.abs(input[i]));
+    $('#level').style.right = `${Math.max(0, 100 - peak * 260)}%`;
+    const secs = (performance.now() - started) / 1000;
+    const clock = $('#clock');
+    clock.textContent = secs.toFixed(1) + 's';
+    clock.className = 'clock' + (secs >= 10 && secs <= 25 ? ' good' : secs > 25 ? ' over' : '');
+  };
+  source.connect(node);
+  node.connect(context.destination);
+
+  recorder = () => {
+    node.disconnect(); source.disconnect();
+    stream.getTracks().forEach(t => t.stop());
+    context.close();
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const flat = new Float32Array(total);
+    let at = 0;
+    for (const c of chunks){ flat.set(c, at); at += c.length; }
+    return encodeWav(flat, sampleRate);
+  };
+}
+
+$('#rec').onclick = async () => {
+  const button = $('#rec');
+  if (!recorder){
+    try {
+      await startRecording();
+    } catch (err) {
+      return show('bad', 'Could not open the microphone: ' + err.message
+        + '. Microphone access needs a secure context — use http://127.0.0.1 rather than a LAN address.');
+    }
+    button.textContent = 'Stop recording';
+    button.className = 'rec';
+    $('#hint').textContent = 'Recording — read the paragraph above.';
+  } else {
+    recordedWav = recorder();
+    recorder = null;
+    button.textContent = 'Start recording';
+    button.className = 'go';
+    $('#level').style.right = '100%';
+    $('#hint').textContent = 'Recorded. Check it back below.';
+    $('#s1').classList.add('done'); $('#t1').className = 'tick'; $('#t1').textContent = '✓ ';
+    $('#preview').src = URL.createObjectURL(new Blob([recordedWav], {type: 'audio/wav'}));
+    $('#save').disabled = $('#again').disabled = false;
+  }
+};
+
+$('#again').onclick = () => {
+  recordedWav = null;
+  $('#save').disabled = $('#again').disabled = true;
+  $('#preview').removeAttribute('src');
+  $('#s1').classList.remove('done'); $('#t1').textContent = '';
+  $('#clock').textContent = '0.0s'; $('#clock').className = 'clock';
+  $('#rec').click();
+};
+
+const show = (kind, text) => {
+  const el = $('#msg');
+  el.className = 'msg on ' + kind;
+  el.textContent = text;
+};
+
+const hex = bytes => [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+
+$('#save').onclick = async () => {
+  if (!recordedWav) return;
+  show('busy', 'Saving…');
+  $('#save').disabled = true;
+  try {
+    const res = await fetch(API + '/enroll', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({wav_hex: hex(recordedWav), transcript: $('#transcript').value})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    show('ok', `Saved — ${data.seconds}s of reference audio. Try it in step three.`);
+    $('#s2').classList.add('done'); $('#t2').className = 'tick'; $('#t2').textContent = '✓ ';
+    $('#say').disabled = false;
+  } catch (err) {
+    show('bad', String(err.message || err));
+    $('#save').disabled = false;
+  }
+};
+
+$('#say').onclick = async () => {
+  const button = $('#say'), stat = $('#saystat');
+  button.disabled = true;
+  stat.textContent = 'synthesising…';
+  const started = performance.now();
+  try {
+    const res = await fetch(API + '/speak', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: $('#test').value})
+    });
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    const blob = await res.blob();
+    const out = $('#out');
+    out.src = URL.createObjectURL(blob);
+    out.style.display = 'block';
+    out.play().catch(() => {});
+    stat.textContent = ((performance.now() - started) / 1000).toFixed(1) + 's';
+    $('#s3').classList.add('done'); $('#t3').className = 'tick'; $('#t3').textContent = '✓ ';
+  } catch (err) {
+    stat.textContent = '';
+    show('bad', String(err.message || err));
+  }
+  button.disabled = false;
+};
+
+// ---------- go ----------
+fetch(API + '/health').then(r => r.json()).then(d => {
+  $('#script').textContent = d.script;
+  $('#transcript').value = d.script;
+  if (d.enrolled){
+    $('#say').disabled = false;
+    show('ok', 'A voice is already enrolled. Record again to replace it.');
+  }
+});
+</script>
+</body>
+</html>

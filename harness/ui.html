@@ -533,6 +533,44 @@ input:focus,.sheet textarea:focus,select:focus{border-color:var(--amber-dim)}
 .picker .go:hover{background:var(--panel-2);color:var(--amber)}
 .picker .ft{display:flex;gap:9px;padding:13px 20px;border-top:1px solid var(--line);flex:0 0 auto}
 
+/* ---------- voice ---------- */
+.voice{
+  display:flex;align-items:center;gap:12px;padding:11px 13px;margin-bottom:8px;
+  border:1px solid var(--line);background:var(--panel-2);
+}
+.voice.on{border-color:var(--amber);background:rgba(232,163,61,.06)}
+.voice .pick{
+  width:6px;height:6px;border-radius:50%;background:var(--line-hot);flex:0 0 auto;
+  border:none;padding:0;cursor:pointer;
+}
+.voice.on .pick{background:var(--amber);box-shadow:0 0 6px rgba(232,163,61,.55)}
+.voice .who2{flex:1;min-width:0}
+.voice .nm2{
+  color:var(--text);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;background:transparent;border:none;padding:0;width:100%;
+  font-family:var(--mono);outline:none;
+}
+.voice.on .nm2{color:var(--amber)}
+.voice .nm2:focus{border-bottom:1px solid var(--amber-dim)}
+.voice .meta2{color:var(--faint);font-size:10px;margin-top:2px}
+.v-script{
+  font-family:var(--read);font-size:15px;line-height:1.7;color:var(--text);
+  background:var(--ink);border-left:2px solid var(--amber-dim);padding:13px 15px;
+}
+.v-meter{flex:1;min-width:80px;height:3px;background:var(--line);position:relative;overflow:hidden}
+.v-meter i{position:absolute;inset:0 100% 0 0;background:var(--sage);transition:right .06s linear}
+.v-clock{font-size:11px;color:var(--faint);min-width:56px;letter-spacing:.06em}
+.v-clock.good{color:var(--sage)}
+.v-clock.over{color:var(--amber)}
+#v-preview{width:100%;margin-top:12px;filter:invert(.88) hue-rotate(180deg)}
+
+/* The speaker button on an answer, and the bar it turns into while working. */
+.act.speaking{color:var(--amber);border-color:var(--amber-dim)}
+.act .dots::after{
+  content:"";animation:dots 1.2s steps(4,end) infinite;
+}
+@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+
 /* ---------- phone ---------- */
 /* With no sidebar there is nothing to hide, so the layout is the same shape at
    every width — only the padding, the grids and the safe areas change. */
@@ -634,6 +672,7 @@ input:focus,.sheet textarea:focus,select:focus{border-color:var(--amber-dim)}
     <button class="set-tab active" data-tab="system">System & Controls</button>
     <button class="set-tab" data-tab="model">Model & Behavior</button>
     <button class="set-tab" data-tab="tools">Tools & Safety</button>
+    <button class="set-tab" data-tab="voice">Voice</button>
     <button class="set-tab" data-tab="automations">Automations</button>
   </div>
 
@@ -753,7 +792,43 @@ input:focus,.sheet textarea:focus,select:focus{border-color:var(--amber-dim)}
       </div>
     </div>
 
-    <!-- Tab 4: Automations -->
+    <!-- Tab 4: Voice -->
+    <div class="tab-panel" id="tab-voice">
+      <div class="sec">
+        <label>Saved voices <span class="rt"><button class="mini" id="v-new">+ Record</button></span></label>
+        <div id="v-list"></div>
+        <div class="note" id="v-note"></div>
+      </div>
+
+      <div class="adv" id="v-form">
+        <div class="sec" style="border-top:1px solid var(--line);margin-top:var(--gap)">
+          <label>Read this aloud</label>
+          <div class="v-script" id="v-script"></div>
+          <div class="ops" style="margin-top:12px">
+            <button class="btn ok" id="v-rec">Start recording</button>
+            <span class="v-meter"><i id="v-level"></i></span>
+            <span class="v-clock" id="v-clock">0.0s</span>
+          </div>
+          <div class="note" id="v-hint">
+            About fifteen seconds is ideal. Read it as written — a transcript that
+            disagrees with the audio is the commonest cause of a poor clone.
+          </div>
+          <audio id="v-preview" controls style="display:none"></audio>
+          <div class="grid2" style="margin-top:11px">
+            <div class="fld"><span>Name this voice</span>
+              <input type="text" id="v-name" placeholder="David — Bored"></div>
+            <div class="fld"><span>What you actually said</span>
+              <input type="text" id="v-transcript"></div>
+          </div>
+          <div class="ops" style="margin-top:11px">
+            <button class="btn ok" id="v-save" disabled>Save voice</button>
+            <button class="btn no" id="v-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: Automations -->
     <div class="tab-panel" id="tab-automations">
       <div class="sec">
         <label>On a schedule <span class="rt"><button class="mini" id="a-new">+ New</button></span></label>
@@ -1267,21 +1342,254 @@ async function ask(text){
   }
 }
 
+// ---------- voice ----------
+// Everything here talks to the optional sidecar through /api/voice/*, which
+// Harness proxies. Going direct from the browser would work on this Mac and
+// nowhere else: on a phone, 127.0.0.1 is the phone.
+let voices = [], voiceUp = false, enrolScript = '';
+
+const voiceApi = async (path, options) => {
+  const res = await fetch('/api/voice' + path, options);
+  if (res.status === 503) { voiceUp = false; throw new Error('sidecar-down'); }
+  voiceUp = true;
+  return res;
+};
+
+async function loadVoices(){
+  try {
+    const data = await (await voiceApi('/voices')).json();
+    voices = data.voices || [];
+    enrolScript = data.script || '';
+  } catch { voices = []; }
+  paintVoices();
+  showActions();               // the speaker button appears or disappears with it
+}
+
+function paintVoices(){
+  const box = $('#v-list'), note = $('#v-note');
+  if (!voiceUp){
+    box.innerHTML = '';
+    note.innerHTML = 'The voice sidecar is not running. Start it with '
+      + '<code>python3 voice/server.py</code> to give Harness a voice of your own.';
+    return;
+  }
+  note.textContent = voices.length
+    ? 'The selected voice is the one used when an answer is read aloud.'
+    : 'No voices yet. Record one and Harness can read its answers back in it.';
+  box.innerHTML = voices.map(v => `
+    <div class="voice ${v.selected ? 'on' : ''}" data-voice="${esc(v.id)}">
+      <button class="pick" title="Use this voice"></button>
+      <span class="who2">
+        <input class="nm2" value="${esc(v.name)}" spellcheck="false">
+        <span class="meta2">${v.seconds}s · recorded ${esc(v.created)}</span>
+      </span>
+      <button class="mini v-play">Play</button>
+      <button class="mini danger v-del">Delete</button>
+    </div>`).join('');
+
+  $$('#v-list .voice').forEach(row => {
+    const id = row.dataset.voice;
+    row.querySelector('.pick').onclick = async () => {
+      await voiceApi(`/voices/${id}/select`, {method: 'POST'});
+      loadVoices();
+    };
+    row.querySelector('.v-play').onclick = () =>
+      new Audio('/api/voice/voices/' + id + '/sample.wav').play();
+    row.querySelector('.v-del').onclick = async () => {
+      if (!confirm('Delete this voice?')) return;
+      await voiceApi('/voices/' + id, {method: 'DELETE'});
+      loadVoices();
+    };
+    // Renaming in place: commit on blur or Enter, rather than adding a button
+    // whose only job is to say "yes, I meant that".
+    const field = row.querySelector('.nm2');
+    const commit = async () => {
+      const name = field.value.trim();
+      if (!name || name === voices.find(v => v.id === id).name) return;
+      await voiceApi(`/voices/${id}/rename`,
+        {method: 'POST', headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({name})});
+      loadVoices();
+    };
+    field.onblur = commit;
+    field.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); field.blur(); } };
+  });
+}
+
+// ---------- recording ----------
+// Raw PCM through the Web Audio graph, encoded to WAV here. MediaRecorder
+// hands back webm/opus or mp4/aac, and decoding either server-side would mean
+// depending on ffmpeg — which this project does not, and should not, need.
+let stopRecording = null, recordedWav = null;
+
+function encodeWav(samples, rate){
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const put = (at, text) => [...text].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+  put(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+  put(8, 'WAVEfmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  put(36, 'data'); view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++){
+    const v = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return new Uint8Array(buffer);
+}
+
+$('#v-new').onclick = () => {
+  $('#v-form').classList.add('open');
+  $('#v-script').textContent = enrolScript;
+  $('#v-transcript').value = enrolScript;
+  $('#v-name').value = '';
+  $('#v-name').focus();
+};
+$('#v-cancel').onclick = () => {
+  if (stopRecording) $('#v-rec').click();
+  $('#v-form').classList.remove('open');
+};
+
+$('#v-rec').onclick = async () => {
+  const button = $('#v-rec');
+  if (stopRecording){
+    recordedWav = stopRecording();
+    stopRecording = null;
+    button.textContent = 'Record again';
+    $('#v-level').style.right = '100%';
+    const preview = $('#v-preview');
+    preview.style.display = 'block';
+    preview.src = URL.createObjectURL(new Blob([recordedWav], {type: 'audio/wav'}));
+    $('#v-save').disabled = false;
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {echoCancellation: false, noiseSuppression: false, autoGainControl: false}
+    });
+  } catch (err) {
+    // getUserMedia needs a secure context, so this works on the Mac at
+    // 127.0.0.1 and not over plain HTTP from a phone. Say so plainly.
+    $('#v-hint').innerHTML = 'Could not open the microphone: ' + esc(err.message)
+      + '. Recording needs a secure context — do this on the Mac itself, at '
+      + '<code>http://127.0.0.1:8420</code>.';
+    return;
+  }
+
+  const context = new AudioContext();
+  const source = context.createMediaStreamSource(stream);
+  const node = context.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+  const started = performance.now();
+
+  node.onaudioprocess = event => {
+    const input = event.inputBuffer.getChannelData(0);
+    chunks.push(new Float32Array(input));
+    let peak = 0;
+    for (let i = 0; i < input.length; i++) peak = Math.max(peak, Math.abs(input[i]));
+    $('#v-level').style.right = Math.max(0, 100 - peak * 260) + '%';
+    const secs = (performance.now() - started) / 1000;
+    const clock = $('#v-clock');
+    clock.textContent = secs.toFixed(1) + 's';
+    clock.className = 'v-clock' + (secs >= 10 && secs <= 25 ? ' good' : secs > 25 ? ' over' : '');
+  };
+  source.connect(node);
+  node.connect(context.destination);
+
+  stopRecording = () => {
+    node.disconnect(); source.disconnect();
+    stream.getTracks().forEach(t => t.stop());
+    context.close();
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const flat = new Float32Array(total);
+    let at = 0;
+    for (const c of chunks){ flat.set(c, at); at += c.length; }
+    return encodeWav(flat, context.sampleRate);
+  };
+  button.textContent = 'Stop recording';
+  $('#v-hint').textContent = 'Recording — read the paragraph above.';
+};
+
+$('#v-save').onclick = async () => {
+  if (!recordedWav) return;
+  const button = $('#v-save');
+  button.disabled = true;
+  button.textContent = 'Saving…';
+  try {
+    const hex = [...recordedWav].map(b => b.toString(16).padStart(2, '0')).join('');
+    const res = await voiceApi('/voices', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name: $('#v-name').value || 'Untitled voice',
+                            transcript: $('#v-transcript').value, wav_hex: hex})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    recordedWav = null;
+    $('#v-form').classList.remove('open');
+    $('#v-preview').style.display = 'none';
+    $('#v-rec').textContent = 'Start recording';
+    $('#v-clock').textContent = '0.0s';
+    loadVoices();
+  } catch (err) {
+    $('#v-hint').textContent = 'Could not save: ' + (err.message || err);
+  }
+  button.disabled = false;
+  button.textContent = 'Save voice';
+};
+
+// ---------- reading an answer aloud ----------
+let player = null;
+
+async function speakAnswer(button){
+  const body = stream.querySelector('.turn.bot:last-of-type .body');
+  if (!body) return;
+  if (player && !player.paused){        // tapping again stops it
+    player.pause(); player = null;
+    button.textContent = 'Speak'; button.classList.remove('speaking');
+    return;
+  }
+  button.classList.add('speaking');
+  button.innerHTML = 'Speaking<span class="dots"></span>';
+  try {
+    const res = await voiceApi('/speak', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: body.innerText})
+    });
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+    player = new Audio(URL.createObjectURL(await res.blob()));
+    player.onended = () => {
+      button.textContent = 'Speak'; button.classList.remove('speaking');
+    };
+    await player.play();
+  } catch (err) {
+    button.textContent = err.message === 'sidecar-down' ? 'No voice' : 'Failed';
+    button.classList.remove('speaking');
+    setTimeout(() => { button.textContent = 'Speak'; }, 2200);
+  }
+}
+
 // ---------- what you can do with the exchange that just finished ----------
 const ACTIONS = [
   ['Retry',  () => rewind(true)],
   ['Edit',   () => rewind(false)],
   ['Find',   () => openFind()],
   ['Export', () => { if (sessionId) location.href = '/api/export/' + sessionId; }],
+  // Only offered when the sidecar is up and a voice exists — an action that
+  // cannot work is worse than one that is not there.
+  ['Speak',  (el) => speakAnswer(el), () => voiceUp && voices.length],
 ];
 
 function showActions(){
   stream.querySelector('.acts')?.remove();
   if (!sessionId) return;
-  const bar = add('acts', ACTIONS.map(([label], i) =>
-    `<button class="act" data-act2="${i}">${label}</button>`).join(''));
+  const shown = ACTIONS.filter(([, , when]) => !when || when());
+  const bar = add('acts', shown.map(([label]) =>
+    `<button class="act" data-act2="${label}">${label}</button>`).join(''));
   bar.querySelectorAll('[data-act2]').forEach(el =>
-    el.onclick = () => ACTIONS[el.dataset.act2][1]());
+    el.onclick = () => shown.find(([label]) => label === el.dataset.act2)[1](el));
 }
 
 // Retry and edit are one operation: unwind to just before you asked, then
@@ -1439,7 +1747,7 @@ function newSession(){
 
 $('#b-new').onclick = newSession;
 $('#b-history').onclick = async () => { openOverlay('#veil-history'); $('#find').value = ''; picked = 0; await loadSessions(); };
-$('#b-settings').onclick = () => { openOverlay('#veil-settings'); refresh(); };
+$('#b-settings').onclick = () => { openOverlay('#veil-settings'); refresh(); loadVoices(); };
 
 // The palette is a keyboard surface first.
 $('#find').addEventListener('input', () => { picked = 0; paintSessions(); });
@@ -1493,7 +1801,7 @@ function closeFind(){
 // innerHTML restore drops the listeners the transcript's buttons rely on.
 function rewire(){
   stream.querySelectorAll('.acts [data-act2]').forEach(el =>
-    el.onclick = () => ACTIONS[el.dataset.act2][1]());
+    el.onclick = () => ACTIONS.find(([label]) => label === el.dataset.act2)[1](el));
   stream.querySelectorAll('[data-starter]').forEach(el =>
     el.onclick = () => ask(STARTERS[el.dataset.starter][1]));
 }
@@ -2025,6 +2333,7 @@ get('/api/config').then(c => {
   paintProject(c);
   $('#thinking').classList.toggle('on', !!c.thinking);
 });
+loadVoices();
 setInterval(health, 15000);
 </script>
 </body>
