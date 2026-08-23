@@ -535,24 +535,38 @@ input:focus,.sheet textarea:focus,select:focus{border-color:var(--amber-dim)}
 
 /* ---------- voice ---------- */
 .voice{
-  display:flex;align-items:center;gap:12px;padding:11px 13px;margin-bottom:8px;
-  border:1px solid var(--line);background:var(--panel-2);
+  border:1px solid var(--line);background:var(--panel-2);margin-bottom:9px;
+  padding:13px 15px;
 }
 .voice.on{border-color:var(--amber);background:rgba(232,163,61,.06)}
+.voice .top2{display:flex;align-items:center;gap:11px}
+/* A radio, drawn as one. The 6px dot it replaced gave no clue it could be
+   clicked, or that the row it sat in was the chosen one. */
 .voice .pick{
-  width:6px;height:6px;border-radius:50%;background:var(--line-hot);flex:0 0 auto;
-  border:none;padding:0;cursor:pointer;
+  width:15px;height:15px;border-radius:50%;flex:0 0 auto;cursor:pointer;
+  border:1px solid var(--line-hot);background:transparent;padding:0;
+  display:flex;align-items:center;justify-content:center;transition:.15s;
 }
-.voice.on .pick{background:var(--amber);box-shadow:0 0 6px rgba(232,163,61,.55)}
-.voice .who2{flex:1;min-width:0}
+.voice .pick:hover{border-color:var(--amber)}
+.voice .pick::after{
+  content:"";width:7px;height:7px;border-radius:50%;background:transparent;transition:.15s;
+}
+.voice.on .pick{border-color:var(--amber)}
+.voice.on .pick::after{background:var(--amber);box-shadow:0 0 6px rgba(232,163,61,.55)}
 .voice .nm2{
-  color:var(--text);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;
-  white-space:nowrap;background:transparent;border:none;padding:0;width:100%;
-  font-family:var(--mono);outline:none;
+  flex:1;min-width:0;color:var(--text);font-size:13px;font-family:var(--mono);
+  background:transparent;border:none;border-bottom:1px dashed var(--line-hot);
+  padding:2px 0;outline:none;transition:.15s;
 }
+.voice .nm2:hover{border-bottom-color:var(--amber-dim)}
+.voice .nm2:focus{border-bottom-style:solid;border-bottom-color:var(--amber);color:var(--amber)}
 .voice.on .nm2{color:var(--amber)}
-.voice .nm2:focus{border-bottom:1px solid var(--amber-dim)}
-.voice .meta2{color:var(--faint);font-size:10px;margin-top:2px}
+.voice .badge{
+  font-family:var(--face);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--amber);flex:0 0 auto;
+}
+.voice .ops{margin-top:11px}
+.voice .meta2{color:var(--faint);font-size:10px;margin-top:7px;margin-left:26px}
 .v-script{
   font-family:var(--read);font-size:15px;line-height:1.7;color:var(--text);
   background:var(--ink);border-left:2px solid var(--amber-dim);padding:13px 15px;
@@ -1348,6 +1362,29 @@ async function ask(text){
 // nowhere else: on a phone, 127.0.0.1 is the phone.
 let voices = [], voiceUp = false, enrolScript = '';
 
+// One audio element for the whole app, kept in a variable that outlives the
+// call that started it. `new Audio(url).play()` with nothing holding the
+// reference is collectable mid-playback, which is exactly as intermittent and
+// baffling as it sounds.
+let player = new Audio();
+
+function playAudio(src, onStop){
+  stopAudio();
+  player.src = src;
+  player.onended = player.onerror = () => { player.onended = null; onStop && onStop(); };
+  player.currentTime = 0;
+  return player.play().catch(err => { onStop && onStop(); throw err; });
+}
+
+function stopAudio(){
+  const wasPlaying = !player.paused;
+  player.pause();
+  const ended = player.onended;
+  player.onended = player.onerror = null;
+  if (wasPlaying && ended) ended();
+  return wasPlaying;
+}
+
 const voiceApi = async (path, options) => {
   const res = await fetch('/api/voice' + path, options);
   if (res.status === 503) { voiceUp = false; throw new Error('sidecar-down'); }
@@ -1378,41 +1415,91 @@ function paintVoices(){
     : 'No voices yet. Record one and Harness can read its answers back in it.';
   box.innerHTML = voices.map(v => `
     <div class="voice ${v.selected ? 'on' : ''}" data-voice="${esc(v.id)}">
-      <button class="pick" title="Use this voice"></button>
-      <span class="who2">
-        <input class="nm2" value="${esc(v.name)}" spellcheck="false">
-        <span class="meta2">${v.seconds}s · recorded ${esc(v.created)}</span>
-      </span>
-      <button class="mini v-play">Play</button>
-      <button class="mini danger v-del">Delete</button>
+      <div class="top2">
+        <button class="pick" title="${v.selected ? 'This voice is in use' : 'Use this voice'}"></button>
+        <input class="nm2" value="${esc(v.name)}" spellcheck="false"
+               title="Click to rename">
+        ${v.selected ? '<span class="badge">In use</span>' : ''}
+      </div>
+      <div class="meta2">${v.seconds}s recorded · ${esc(v.created)}</div>
+      <div class="ops">
+        <button class="mini v-hear">Hear recording</button>
+        <button class="mini v-test">Test voice</button>
+        <button class="mini danger v-del">Delete</button>
+      </div>
     </div>`).join('');
 
   $$('#v-list .voice').forEach(row => {
     const id = row.dataset.voice;
+
     row.querySelector('.pick').onclick = async () => {
       await voiceApi(`/voices/${id}/select`, {method: 'POST'});
       loadVoices();
     };
-    row.querySelector('.v-play').onclick = () =>
-      new Audio('/api/voice/voices/' + id + '/sample.wav').play();
+
+    // The reference you recorded, played straight back.
+    const hear = row.querySelector('.v-hear');
+    hear.onclick = async () => {
+      if (hear.textContent === 'Stop') return void stopAudio();
+      hear.textContent = 'Stop';
+      try {
+        await playAudio('/api/voice/voices/' + id + '/sample.wav',
+                        () => { hear.textContent = 'Hear recording'; });
+      } catch (err) {
+        hear.textContent = 'Could not play';
+        setTimeout(() => { hear.textContent = 'Hear recording'; }, 2000);
+      }
+    };
+
+    // The clone, which is the thing you actually want to judge — the reference
+    // only tells you what went in.
+    const test = row.querySelector('.v-test');
+    test.onclick = async () => {
+      if (test.textContent === 'Stop') return void stopAudio();
+      test.textContent = 'Synthesising…';
+      test.disabled = true;
+      try {
+        const res = await voiceApi('/speak', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({voice_id: id, text:
+            'This is how I sound when Harness reads an answer back to you.'})
+        });
+        if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+        test.disabled = false;
+        test.textContent = 'Stop';
+        await playAudio(URL.createObjectURL(await res.blob()),
+                        () => { test.textContent = 'Test voice'; });
+      } catch (err) {
+        test.disabled = false;
+        test.textContent = err.message === 'sidecar-down' ? 'Sidecar down' : 'Failed';
+        setTimeout(() => { test.textContent = 'Test voice'; }, 2400);
+      }
+    };
+
     row.querySelector('.v-del').onclick = async () => {
-      if (!confirm('Delete this voice?')) return;
+      if (!confirm(`Delete "${voices.find(v => v.id === id).name}"?`)) return;
+      stopAudio();
       await voiceApi('/voices/' + id, {method: 'DELETE'});
       loadVoices();
     };
-    // Renaming in place: commit on blur or Enter, rather than adding a button
-    // whose only job is to say "yes, I meant that".
+
+    // Renaming in place. The dashed underline is the affordance — without one
+    // it was an input that looked exactly like a label.
     const field = row.querySelector('.nm2');
     const commit = async () => {
       const name = field.value.trim();
-      if (!name || name === voices.find(v => v.id === id).name) return;
+      const before = voices.find(v => v.id === id).name;
+      if (!name || name === before){ field.value = before; return; }
       await voiceApi(`/voices/${id}/rename`,
         {method: 'POST', headers: {'Content-Type': 'application/json'},
          body: JSON.stringify({name})});
       loadVoices();
     };
     field.onblur = commit;
-    field.onkeydown = e => { if (e.key === 'Enter'){ e.preventDefault(); field.blur(); } };
+    field.onkeydown = e => {
+      if (e.key === 'Enter'){ e.preventDefault(); field.blur(); }
+      if (e.key === 'Escape'){ field.value = voices.find(v => v.id === id).name; field.blur(); }
+    };
   });
 }
 
@@ -1444,6 +1531,9 @@ $('#v-new').onclick = () => {
   $('#v-script').textContent = enrolScript;
   $('#v-transcript').value = enrolScript;
   $('#v-name').value = '';
+  // It opens below whatever voices already exist, which on a full list is off
+  // the bottom of the sheet — so say where it went.
+  $('#v-form').scrollIntoView({behavior: 'smooth', block: 'start'});
   $('#v-name').focus();
 };
 $('#v-cancel').onclick = () => {
@@ -1541,33 +1631,38 @@ $('#v-save').onclick = async () => {
 };
 
 // ---------- reading an answer aloud ----------
-let player = null;
-
 async function speakAnswer(button){
-  const body = stream.querySelector('.turn.bot:last-of-type .body');
-  if (!body) return;
-  if (player && !player.paused){        // tapping again stops it
-    player.pause(); player = null;
-    button.textContent = 'Speak'; button.classList.remove('speaking');
-    return;
+  const done = () => {
+    button.textContent = 'Speak';
+    button.classList.remove('speaking');
+  };
+  if (stopAudio()) return done();            // tapping again stops it
+
+  // :last-of-type was wrong here: it matches by element type, and every turn
+  // is a div, so it only ever matched when the answer happened to be the last
+  // div in the stream — which it never is, because showActions() appends the
+  // button bar after it. Speak silently did nothing.
+  const bodies = stream.querySelectorAll('.turn.bot .body');
+  const body = bodies[bodies.length - 1];
+  if (!body){
+    button.textContent = 'Nothing to read';
+    return setTimeout(done, 1800);
   }
+
   button.classList.add('speaking');
-  button.innerHTML = 'Speaking<span class="dots"></span>';
+  button.innerHTML = 'Working<span class="dots"></span>';
   try {
     const res = await voiceApi('/speak', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({text: body.innerText})
     });
     if (!res.ok) throw new Error((await res.json()).error || res.statusText);
-    player = new Audio(URL.createObjectURL(await res.blob()));
-    player.onended = () => {
-      button.textContent = 'Speak'; button.classList.remove('speaking');
-    };
-    await player.play();
+    button.textContent = 'Stop';
+    await playAudio(URL.createObjectURL(await res.blob()), done);
   } catch (err) {
-    button.textContent = err.message === 'sidecar-down' ? 'No voice' : 'Failed';
     button.classList.remove('speaking');
-    setTimeout(() => { button.textContent = 'Speak'; }, 2200);
+    button.textContent = err.message === 'sidecar-down' ? 'No voice' : 'Failed';
+    setTimeout(done, 2400);
   }
 }
 
