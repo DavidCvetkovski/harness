@@ -10,7 +10,11 @@ jobs:
   test:
     # The suite is pure standard library, so it runs anywhere Python does —
     # including Linux, even though Harness itself only runs on macOS.
-    runs-on: ubuntu-latest
+    #
+    # Pinned rather than ubuntu-latest: from 26.04 on there is no Python 3.9
+    # build to install, and 3.9 is the one that matters most — it is what
+    # macOS ships as /usr/bin/python3.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
