@@ -193,6 +193,18 @@ MODEL_PROFILES = {
     "qwen3.8-27b": {"kv_kb": 64.0, "ctx": 32768,
                     "temperature": 0.7, "top_p": 0.80, "top_k": 20,
                     "when_thinking": {"temperature": 1.0, "top_p": 0.95}},
+    # Plain full attention on all 40 layers (8 KV heads x 128 dim), so context
+    # costs 2.5x what it does on the 27B. Qwen3's card asks for 0.6 while
+    # thinking, but sampling_for only ever raises temperature, so just top_p
+    # changes — 0.7 is close enough to think in.
+    # Same hybrid layout and the same card numbers as the 27B. Also covers the
+    # stock Qwen3.5-9B — the abliterated file is named to share the prefix.
+    "qwen3.5-9b":  {"kv_kb": 32.0, "ctx": 32768,
+                    "temperature": 0.7, "top_p": 0.80, "top_k": 20,
+                    "when_thinking": {"temperature": 1.0, "top_p": 0.95}},
+    "qwen3-14b":   {"kv_kb": 160.0, "ctx": 12288,
+                    "temperature": 0.7, "top_p": 0.80, "top_k": 20,
+                    "when_thinking": {"top_p": 0.95}},
 }
 DEFAULT_PROFILE = {"kv_kb": 80.0, "ctx": 16384,
                    "temperature": 0.6, "top_p": 0.95, "top_k": 20,

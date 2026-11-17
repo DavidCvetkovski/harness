@@ -29,11 +29,19 @@ from . import config as settings
 from . import tools
 
 SERVER = "http://127.0.0.1:8080/v1/chat/completions"
+PROPS = "http://127.0.0.1:8080/props"
 REQUEST_TIMEOUT = 300    # generation runs ~30 t/s, so be patient
 
-# Roughly 8K tokens of conversation, leaving the rest of the 16K window for the
-# system prompt, the tool schemas, and the reply being generated.
+# What trim_history keeps when it is not told otherwise: roughly 8K tokens of
+# conversation, leaving the rest of a 16K window for the system prompt, the
+# tool schemas, and the reply. run() sizes it to the real window instead.
 HISTORY_CHAR_BUDGET = 24000
+
+# For turning a context window into a character budget. Prose runs nearer four
+# characters a token, but tool output — paths, JSON, page fragments — tokenises
+# far worse, and overshooting the window is an error, not a slow answer.
+CHARS_PER_TOKEN = 2.5
+PROMPT_OVERHEAD_TOKENS = 2500    # the system prompt and the tool schemas
 
 # Streamed tool calls arrive as plain text as often as they arrive parsed.
 # Printing that raw dumps a wall of escaped source on the user, so output stops
@@ -298,14 +306,74 @@ def as_markdown(session_id):
     return "\n".join(lines)
 
 
-def trim_history(history):
+def context_window():
+    """
+    The context llama-server is actually running with.
+
+    Asked of the server rather than read from the model's profile, because
+    `harness model -c` overrides the profile. The profile is the fallback for
+    when the server cannot say.
+    """
+    try:
+        with urllib.request.urlopen(PROPS, timeout=2) as response:
+            n_ctx = int(json.load(response)["default_generation_settings"]["n_ctx"])
+        if n_ctx > 0:
+            return n_ctx
+    except (OSError, ValueError, KeyError, TypeError, urllib.error.URLError,
+            http.client.HTTPException):
+        pass
+    return settings.profile_for(settings.current_model())["ctx"]
+
+
+def history_budget(cfg, n_ctx):
+    """
+    How many characters of conversation fit in a window of n_ctx tokens.
+
+    What is left after the system prompt, the tool schemas and room for the
+    reply. The reply's share is capped at a quarter of the window: max_tokens
+    is a ceiling on one answer, and reserving all of a generous one would
+    leave almost nothing for the conversation it is answering.
+    """
+    reply = min(int(cfg.get("max_tokens", 1200)), n_ctx // 4)
+    tokens = n_ctx - PROMPT_OVERHEAD_TOKENS - reply
+    return max(4000, int(tokens * CHARS_PER_TOKEN))
+
+
+def trim_history(history, budget=HISTORY_CHAR_BUDGET):
     """
     Drop the oldest exchanges once the conversation outgrows the budget.
 
-    Tool output is bulky, and the window is 16K. Keeping everything would push
-    the system prompt out of context, which is worse than forgetting turn one.
+    Keeping everything would push the system prompt out of context, which is
+    worse than forgetting turn one.
+
+    Where it cuts matters as much as how much. llama-server reuses its work
+    on a prompt only as far as the prompt starts the same way, so a cut that
+    creeps forward a message at a time changes the opening at every step, and
+    every step re-reads the whole conversation from scratch — measured at
+    70-90 seconds a step on a 12K-token chat with a 9B, which is most of what
+    made a phone conversation feel broken. So a cut only ever lands at the
+    start of an exchange, and only at fixed places spaced a third of the budget
+    apart along the history. Those places depend on what came first, which
+    never changes, so the chosen one holds still while the conversation grows
+    by about a third of the budget before it has to move again.
     """
-    budget = HISTORY_CHAR_BUDGET
+    sizes = [len(str(message.get("content") or "")) + 200 for message in history]
+    total = sum(sizes)
+    if total <= budget:
+        return list(history)
+
+    spacing = max(1, budget // 3)
+    before = 0               # characters ahead of the message being looked at
+    mark = spacing           # the next place a cut may land
+    for index, message in enumerate(history):
+        if message.get("role") == "user" and before >= mark:
+            if total - before <= budget:
+                return history[index:]
+            mark = before + spacing
+        before += sizes[index]
+
+    # The current exchange alone is over budget — no cut at an exchange
+    # boundary leaves room — so fall back to dropping single messages.
     kept = []
     for message in reversed(history):
         budget -= len(str(message.get("content") or "")) + 200
@@ -530,8 +598,11 @@ def stream(messages, cfg, sink, use_tools=True):
 def run(history, user_input, cfg, sink):
     """Run one exchange to completion, extending `history` in place."""
     history.append({"role": "user", "content": user_input})
-    messages = ([{"role": "system", "content": cfg["system_prompt"]}]
-                + trim_history(history))
+    system = {"role": "system", "content": cfg["system_prompt"]}
+    # Sized to the window the server really has. A fixed 24K-character budget
+    # written for a 16K window kept trimming a 32K one at half its capacity,
+    # and every trim cost a full re-read of the prompt (see trim_history).
+    budget = history_budget(cfg, context_window())
 
     seen = {}
     repeats = 0
@@ -549,17 +620,17 @@ def run(history, user_input, cfg, sink):
         # Re-trimmed every step, not just at the start. The budget was applied
         # once to the conversation and then several thousand characters of tool
         # output were appended to it, which is how a turn that read two large
-        # files pushed the system prompt out of a 16K window mid-turn.
-        text, calls, used = stream(
-            [messages[0]] + trim_history(messages[1:]), cfg, sink)
+        # files pushed the system prompt out of a 16K window mid-turn. Always
+        # from the whole history: trimming an already-trimmed list put its cut
+        # points somewhere else, and moved the opening between turns.
+        text, calls, used = stream([system] + trim_history(history, budget),
+                                   cfg, sink)
         tokens += used
         if sink.cancelled() or not calls:
             history.append({"role": "assistant", "content": text})
             return done()
 
-        turn = {"role": "assistant", "content": "", "tool_calls": calls}
-        messages.append(turn)
-        history.append(turn)
+        history.append({"role": "assistant", "content": "", "tool_calls": calls})
 
         for call in calls:
             name = call["function"]["name"]
@@ -578,10 +649,8 @@ def run(history, user_input, cfg, sink):
                 result = seen[signature] = tools.call(name, args, cfg, sink)
 
             sink.tool_result(name, result)
-            tool_turn = {"role": "tool", "tool_call_id": call.get("id", ""),
-                         "content": result}
-            messages.append(tool_turn)
-            history.append(tool_turn)
+            history.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                            "content": result})
 
         if repeats >= 2:
             break
@@ -593,9 +662,10 @@ def run(history, user_input, cfg, sink):
 
     # Stuck or out of steps: ask once more with no tools, so prose is all it can
     # produce. An imperfect answer beats reporting nothing.
-    messages.append({"role": "user", "content":
-                     "Answer my original question now, using what you found above."})
-    text, _, used = stream([messages[0]] + trim_history(messages[1:]),
+    # Sent, not kept: the nudge is the loop talking, not the user.
+    nudge = {"role": "user", "content":
+             "Answer my original question now, using what you found above."}
+    text, _, used = stream([system] + trim_history(history + [nudge], budget),
                            cfg, sink, use_tools=False)
     tokens += used
     if text:

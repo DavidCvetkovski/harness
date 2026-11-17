@@ -126,6 +126,21 @@ case "$(basename "$MODEL")" in
         # the agent swaps it in per request, which these flags cannot do.
         DEF_TEMP=0.7 ; DEF_TOP_P=0.80 ; DEF_TOP_K=20
         ;;
+    qwen3.5-9b*)
+        # Hybrid like the 27B: 8 of 32 layers keep a KV cache (4 KV heads x
+        # 256 dim), so 32 KB/token at f16. ~5.7 GB of Q4_K_M weights plus 32K
+        # of cache is ~6.6 GB — well clear of the budget, no swap.
+        KV_KB_PER_TOKEN=32.0 ; DEF_CTX=32768
+        DEF_TEMP=0.7 ; DEF_TOP_P=0.80 ; DEF_TOP_K=20
+        ;;
+    qwen3-14b*)
+        # Full attention on all 40 layers, 8 KV heads x 128 dim: 40 x 8 x 128
+        # x 2 x 2 bytes = 160 KB/token at f16, 2.5x the 27B. With ~9 GB of
+        # Q4_K_M weights, 16K lands ~10.65 GB against the ~10.7 GB budget —
+        # no headroom at all — so 12K (~10.3 GB) is the ceiling on 16 GB.
+        KV_KB_PER_TOKEN=160.0 ; DEF_CTX=12288
+        DEF_TEMP=0.7 ; DEF_TOP_P=0.80 ; DEF_TOP_K=20
+        ;;
     *)
         KV_KB_PER_TOKEN=80.0 ; DEF_CTX=16384
         DEF_TEMP=0.6 ; DEF_TOP_P=0.95 ; DEF_TOP_K=20

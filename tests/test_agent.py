@@ -135,6 +135,59 @@ class HistoryBudget(unittest.TestCase):
                    {"role": "assistant", "content": "fine"}]
         self.assertEqual(len(agent.trim_history(history)), 2)
 
+    @staticmethod
+    def exchange(n, size=800):
+        return [{"role": "user", "content": f"question {n} " + "q" * size},
+                {"role": "assistant", "content": "", "tool_calls": [{"id": str(n)}]},
+                {"role": "tool", "tool_call_id": str(n), "content": "t" * size},
+                {"role": "assistant", "content": f"answer {n} " + "a" * size}]
+
+    def test_a_cut_lands_at_the_start_of_an_exchange(self):
+        history = [m for n in range(12) for m in self.exchange(n)]
+        kept = agent.trim_history(history, budget=10000)
+        self.assertLess(len(kept), len(history))
+        self.assertEqual(kept[0]["role"], "user")
+
+    def test_the_opening_holds_still_while_the_conversation_grows(self):
+        # llama-server reuses work only for the part of the prompt that starts
+        # the same way. A cut that crept forward a message per step changed the
+        # opening every step, and every step re-read 12K tokens from scratch.
+        budget, history, openings = 10000, [], []
+        for n in range(30):
+            for message in self.exchange(n):
+                history.append(message)
+                openings.append(agent.trim_history(history, budget)[0]["content"])
+        moves = sum(1 for a, b in zip(openings, openings[1:]) if a != b)
+        steps = len(openings) - 1
+        grown = sum(len(m["content"]) + 200 for m in history)
+        # Once per third of the budget at most, against once per step before.
+        self.assertLessEqual(moves, grown // (budget // 3) + 1)
+        self.assertLess(moves, steps // 4)
+
+    def test_the_budget_follows_the_window(self):
+        cfg = {"max_tokens": 1200}
+        small = agent.history_budget(cfg, 16384)
+        large = agent.history_budget(cfg, 32768)
+        self.assertGreaterEqual(small, agent.HISTORY_CHAR_BUDGET)
+        self.assertGreater(large, small * 2)
+
+    def test_a_huge_max_tokens_does_not_starve_the_conversation(self):
+        # max_tokens is a ceiling on one answer. Reserving all 16000 of it out
+        # of a 32K window would leave the conversation a sliver.
+        self.assertGreater(agent.history_budget({"max_tokens": 16000}, 32768), 50000)
+
+
+class ContextWindow(TempStateTest):
+
+    def test_without_a_server_it_falls_back_to_the_model_profile(self):
+        original = agent.PROPS
+        agent.PROPS = "http://127.0.0.1:9/props"     # nothing listens on 9
+        try:
+            self.assertEqual(agent.context_window(),
+                             agent.settings.DEFAULT_PROFILE["ctx"])
+        finally:
+            agent.PROPS = original
+
 
 class XmlToolCalls(unittest.TestCase):
     """

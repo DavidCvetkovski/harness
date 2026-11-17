@@ -7,11 +7,36 @@ refusal really does leave the disk alone.
 """
 
 import os
+import shutil
 import unittest
 
 from harness import tools
 
 from .support import Recorder, TempStateTest
+
+
+def minimal_pdf(lines):
+    """A one-page PDF with an uncompressed text layer — enough for PDFKit."""
+    text = ("BT /F1 12 Tf 72 720 Td 14 TL "
+            + " ".join(f"({line}) Tj T*" for line in lines) + " ET")
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        "/Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(text)} >>\nstream\n{text}\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out, offsets = "%PDF-1.4\n", []
+    for number, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n{body}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n"
+    out += "".join(f"{offset:010d} 00000 n \n" for offset in offsets)
+    out += (f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+            f"startxref\n{xref}\n%%EOF\n")
+    return out.encode("latin-1")
 
 
 class Resolving(TempStateTest):
@@ -49,6 +74,17 @@ class Writing(TempStateTest):
         result = tools.write_file(
             {"path": path, "content": "replaced"}, self.cfg(), Recorder(allow=False))
         self.assertIn("declined", result)
+        with open(path) as handle:
+            self.assertEqual(handle.read(), "original")
+
+    def test_a_stopped_turn_is_not_reported_as_a_refusal(self):
+        # Stopping a turn while its question is on screen answers the question
+        # no, but you didn't decline anything — and the transcript said you had.
+        path = self.write("keep2.txt", "original")
+        result = tools.write_file({"path": path, "content": "replaced"}, self.cfg(),
+                                  Recorder(allow=False, cancelled=True))
+        self.assertNotIn("declined", result)
+        self.assertIn("stopped", result)
         with open(path) as handle:
             self.assertEqual(handle.read(), "original")
 
@@ -174,6 +210,57 @@ class Reading(TempStateTest):
     def test_an_empty_file_is_not_an_error(self):
         path = self.write("empty.py", "")
         self.assertIn("empty file", tools.read_file({"path": path}, self.cfg(), Recorder()))
+
+    def write_bytes(self, name, data):
+        path = os.path.join(self.project, name)
+        with open(path, "wb") as handle:
+            handle.write(data)
+        return path
+
+    def test_a_binary_file_is_refused_rather_than_dumped(self):
+        # Pages of replacement characters cost context and tell the model
+        # nothing, so it is told what the file is instead.
+        path = self.write_bytes("photo.jpg", b"\xff\xd8\xff\xe0\0\x10JFIF\0" * 50)
+        result = tools.read_file({"path": path}, self.cfg(), Recorder())
+        self.assertIn("binary file", result)
+        self.assertNotIn("JFIF", result)
+
+    @unittest.skipUnless(shutil.which("osascript"), "PDF text extraction needs macOS")
+    def test_a_pdf_comes_back_as_its_words(self):
+        # The bug this replaces: a CV read as 4,000 lines of PDF object syntax,
+        # with the actual words compressed where the model could not see them.
+        path = self.write_bytes("cv.pdf", minimal_pdf(["Jane Doe", "ML engineer"]))
+        result = tools.read_file({"path": path}, self.cfg(), Recorder())
+        self.assertIn("text extracted from the PDF", result)
+        self.assertIn("   1 | Jane Doe", result)
+        self.assertIn("   2 | ML engineer", result)
+        self.assertNotIn("endobj", result)
+
+    @unittest.skipUnless(shutil.which("osascript"), "PDF text extraction needs macOS")
+    def test_a_pdf_is_recognised_by_its_contents_not_its_name(self):
+        path = self.write_bytes("download", minimal_pdf(["no extension"]))
+        result = tools.read_file({"path": path}, self.cfg(), Recorder())
+        self.assertIn("no extension", result)
+
+    @unittest.skipUnless(shutil.which("osascript"), "PDF text extraction needs macOS")
+    def test_a_pdf_with_no_text_layer_says_why(self):
+        path = self.write_bytes("scan.pdf", minimal_pdf([]))
+        result = tools.read_file({"path": path}, self.cfg(), Recorder())
+        self.assertIn("no text", result)
+
+    @unittest.skipUnless(shutil.which("osascript"), "PDF text extraction needs macOS")
+    def test_a_broken_pdf_is_an_error_not_junk(self):
+        path = self.write_bytes("broken.pdf", b"%PDF-1.4\n" + b"\0garbage" * 100)
+        result = tools.read_file({"path": path}, self.cfg(), Recorder())
+        self.assertTrue(result.startswith("Error:"), result)
+
+    @unittest.skipUnless(shutil.which("textutil"), "document extraction needs macOS")
+    def test_a_word_processor_file_comes_back_as_its_words(self):
+        path = self.write("letter.rtf", r"{\rtf1\ansi Dear team,\par Regards}")
+        result = tools.read_file({"path": path}, self.cfg(), Recorder())
+        self.assertIn("text extracted from the document", result)
+        self.assertIn("Dear team,", result)
+        self.assertNotIn("rtf1", result)
 
 
 class Truncation(unittest.TestCase):

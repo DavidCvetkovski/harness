@@ -290,6 +290,34 @@ approvals_lock = threading.Lock()
 # Chat turns in flight, so /api/cancel can find the sink to stop.
 live_turns = {}
 
+# Left in the transcript when an approval sat unanswered until the backstop.
+# Said in the transcript rather than only on screen, because the turn may have
+# had no screen by then.
+EXPIRED_STOP = ("(Stopped here: the next step waited {hours} hours for your "
+                "approval and nobody answered. Send the request again to carry on.)")
+
+
+def session_running(session_id):
+    """Whether a turn is still being worked on for this chat."""
+    return any(sink.session_id == session_id for sink in list(live_turns.values()))
+
+
+def waiting_approvals(session_id):
+    """
+    The questions a chat's turn is waiting on, for a page that comes back to it.
+
+    The page that was shown a question is not always there to answer it: the
+    phone locks, the tab closes, the chat is opened on the Mac instead. The
+    question waits on the server either way, and whichever page opens the chat
+    next is given it.
+    """
+    with approvals_lock:
+        return [{"id": approval_id, "question": record.get("question", ""),
+                 "kind": record.get("kind", ""), "detail": record.get("detail", "")}
+                for approval_id, record in approvals.items()
+                if record["sink"].session_id == session_id
+                and not record["event"].is_set()]
+
 
 def release_approvals(sink):
     """
@@ -319,6 +347,10 @@ class WebSink(agent.Sink):
         self.channel = channel
         self.session_id = session_id
         self.stopped = False
+        # The browser has gone but the turn carries on (see chat()).
+        self.detached = False
+        # Ended by an approval nobody answered before the backstop.
+        self.expired = False
         self.active_response = None
 
     def emit(self, event, **fields):
@@ -353,32 +385,35 @@ class WebSink(agent.Sink):
         Send the preview to the UI, then wait for the user to click Allow or
         Deny.
 
-        It waits as long as the browser is still there. It used to give up
-        after five minutes, which sounds generous until you watch a real turn:
-        generation runs at a couple of tokens a second, a turn that writes
+        It waits until it is answered. It used to give up after five minutes,
+        which sounds generous until you watch a real turn: generation runs at
+        a couple of tokens a second, a turn that writes
         three files takes the better part of an hour, and the person who asked
         for it has quite reasonably gone to do something else. Coming back to
         three refusals — of work the model had already done — is the worst
         possible outcome, because refusing is meant to be the *safe* default,
         not the likely one.
 
-        What the old timeout was really for was the tab that goes away without
-        closing its socket. That is now the heartbeat's job (see chat()), which
-        notices a dead client within seconds and releases the approvals it was
-        blocking. The backstop below is only there so a wait cannot outlive
-        the day it started in.
+        Nor does it matter whether the page that asked is still there. A phone
+        locks within a minute of being put down, and a turn that gave up the
+        moment it had nobody to ask threw away everything it had done to get
+        that far. The question waits here instead, and whichever page opens
+        the chat next is shown it (see waiting_approvals()). The backstop is
+        only there so a wait cannot outlive the day it started in.
         """
         if kind and kind in granted.get(self.session_id, ()):
             return True
 
         approval_id = uuid.uuid4().hex[:12]
+        detail = detail.strip("\n")
         record = {"event": threading.Event(), "allowed": False, "always": False,
-                  "sink": self}
+                  "sink": self, "question": question, "kind": kind,
+                  "detail": detail}
         with approvals_lock:
             approvals[approval_id] = record
 
         self.emit("approval", id=approval_id, question=question, kind=kind,
-                  detail=detail.strip("\n"))
+                  detail=detail)
 
         # Waited in slices rather than one long block, so that stopping the
         # turn stops the asking too.
@@ -390,8 +425,13 @@ class WebSink(agent.Sink):
         with approvals_lock:
             approvals.pop(approval_id, None)
         if not answered:
-            self.emit("approval_resolved", id=approval_id, allowed=False,
-                      timed_out=True)
+            if not self.stopped:
+                # Nobody answered all day. Refusing and carrying on would have
+                # the model tell you that you declined something you never
+                # saw, so the turn ends here, and says why in the transcript.
+                self.emit("approval_resolved", id=approval_id, allowed=False,
+                          timed_out=True)
+                self.stopped = self.expired = True
             return False
         if record["always"] and kind:
             granted.setdefault(self.session_id, set()).add(kind)
@@ -881,7 +921,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny()
             session_id = path.rsplit("/", 1)[-1]
             _, messages = agent.load_session(session_id)
-            return self.send(200, {"id": session_id, "messages": messages})
+            return self.send(200, {"id": session_id, "messages": messages,
+                                   "running": session_running(session_id),
+                                   "approvals": waiting_approvals(session_id)})
 
         if path.startswith("/api/export/"):
             if not self.authorised():
@@ -917,6 +959,16 @@ class Handler(BaseHTTPRequestHandler):
 
         session_id = body.get("session_id") or agent.new_session_id()
         turn_id = body.get("turn_id") or uuid.uuid4().hex[:12]
+        # One turn per chat at a time. A turn left running by a page that went
+        # away saves the whole chat when it finishes, which would silently
+        # overwrite whatever a second turn had added in the meantime.
+        if body.get("session_id") and session_running(session_id):
+            if waiting_approvals(session_id):
+                return self.send(409, {"error": "The last message in this chat is "
+                                                "waiting for your approval — answer "
+                                                "it above first."})
+            return self.send(409, {"error": "Still working on the last message "
+                                            "in this chat — wait for it to finish."})
         history = agent.load_session(session_id)[1] if body.get("session_id") else []
 
         cfg = settings.load_config()
@@ -931,6 +983,15 @@ class Handler(BaseHTTPRequestHandler):
         channel = queue.Queue()
         sink = WebSink(channel, session_id)
         live_turns[turn_id] = sink
+        # Saved with the question before any work starts, so reopening the chat
+        # mid-turn shows what was asked rather than the chat as it was before.
+        # The full exchange overwrites this when the turn ends.
+        agent.save_session(session_id,
+                           history + [{"role": "user", "content": message}])
+        # First, so a brand-new chat knows its id even if the connection drops
+        # before the end — the id used to arrive only with "done", and a phone
+        # that lost the stream had no way back to the answer.
+        channel.put({"type": "session", "session_id": session_id})
 
         def worker():
             try:
@@ -940,6 +1001,10 @@ class Handler(BaseHTTPRequestHandler):
             finally:
                 if sink.stopped:
                     channel.put({"type": "cancelled"})
+                    if sink.expired:
+                        hours = round(APPROVAL_BACKSTOP / 3600)
+                        history.append({"role": "assistant",
+                                        "content": EXPIRED_STOP.format(hours=hours)})
                 agent.save_session(session_id, history)
                 live_turns.pop(turn_id, None)
                 channel.put({"type": "done", "session_id": session_id})
@@ -962,10 +1027,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(payload.encode())
                 self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError, OSError):
-                # Tab closed. Stop the turn and release anything it is blocked
-                # on, so the thread can finish instead of waiting forever.
-                sink.stopped = True
-                release_approvals(sink)
+                # The page went away. On a phone that is usually nothing more
+                # than the screen locking or a switch to another app — iOS
+                # drops the connection within seconds — and stopping the turn
+                # threw away a minute of work every time it happened. So the
+                # turn carries on, and saves when it finishes; the page polls
+                # for that and shows the answer when it lands. An approval
+                # waits too, for whichever page opens the chat next — ending
+                # the turn there instead is what made you send the whole
+                # request again. Stop still means stop — that is /api/cancel.
+                sink.detached = True
                 return
 
             if event and event["type"] == "done":

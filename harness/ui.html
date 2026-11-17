@@ -1127,15 +1127,16 @@ function toolOutput(card, result){
 
 // ---------- approvals ----------
 // Every approval still waiting for an answer, by id. Kept in one place because
-// a card can also be settled by something other than a click: the agent gives
-// up after five minutes, and stopping a turn abandons whatever it was asking.
+// a card can also be settled by something other than a click: stopping a turn
+// abandons whatever it was asking, and another screen can answer it first.
 const openApprovals = new Map();
 
 const VERDICT = {
   allowed:   'Allowed',
   denied:    'Denied',
-  timeout:   'Timed out waiting for an answer — refused',
+  timeout:   'Nobody answered all day — the turn stopped here',
   abandoned: 'Turn stopped before this was answered',
+  elsewhere: 'Answered on another screen',
 };
 
 function settleApproval(card, outcome, always){
@@ -1180,10 +1181,30 @@ function approvalCard(ev){
 }
 
 // Nothing is going to answer these now.
-function closeApprovals(){
-  for (const id of [...openApprovals.keys()])
+function closeApprovals(ids = [...openApprovals.keys()]){
+  for (const id of ids){
     settleApproval(document.getElementById('ask-' + id), 'abandoned');
-  openApprovals.clear();
+    openApprovals.delete(id);
+  }
+}
+
+// The questions a turn is waiting on with no page attached to it — the phone
+// locked just as it asked, or it asked afterwards. They wait on the Mac until
+// someone answers, and this puts them in front of whoever opens the chat.
+function syncApprovals(id, waiting = []){
+  if (sessionId !== id) return;
+  const live = new Set(waiting.map(a => a.id));
+  for (const a of waiting)
+    if (!document.getElementById('ask-' + a.id)) approvalCard(a);
+  for (const open of [...openApprovals.keys()])
+    if (!live.has(open)) settleApproval(document.getElementById('ask-' + open), 'elsewhere');
+  // The note goes below the question, and says what it is actually waiting on.
+  const note = document.querySelector(`.working[data-watch="${id}"]`);
+  if (note){
+    note.querySelector('.lbl').textContent = waiting.length ? WAITING_NOTE : WATCH_NOTE;
+    stream.appendChild(note);
+    stick();
+  }
 }
 
 // Y / A / N answer the approval on screen — one listener for all of them
@@ -1222,7 +1243,8 @@ async function ask(text){
   turn('user', render(text));
   input.value = ''; input.style.height = 'auto';
 
-  let body = null, card = null, buffer = '';
+  let body = null, card = null, buffer = '', finished = false, handedOff = false;
+  const asked = [];
 
   // One spinner at a time, replaced rather than relabelled when the turn moves
   // to a different phase — its clock is timing the phase, and a "writing" line
@@ -1293,9 +1315,9 @@ async function ask(text){
       card = null;
       showSpinner('after-tool', thinkOn() ? 'thinking' : 'working');
     },
-    approval(ev){ moveOn(); approvalCard(ev); },
-    // The approval sat unanswered for five minutes and the agent gave up. The
-    // card has to say so, or it stays on screen looking like it still matters.
+    approval(ev){ moveOn(); approvalCard(ev); asked.push(ev.id); },
+    // The approval sat unanswered all day and the turn gave up. The card has
+    // to say so, or it stays on screen looking like it still matters.
     approval_resolved(ev){
       settleApproval(document.getElementById('ask-' + ev.id),
                      ev.timed_out ? 'timeout' : 'denied');
@@ -1311,7 +1333,21 @@ async function ask(text){
       const steps = ev.steps > 1 ? ` · ${ev.steps} steps` : '';
       add('cost', `${ev.seconds}s${ev.tokens ? ` · ${ev.tokens} tokens` : ''}${rate}${steps}`);
     },
-    done(ev){ sessionId = ev.session_id; },
+    // Sent first, so a new chat knows where its answer will be saved even if
+    // the connection drops before "done" arrives.
+    session(ev){ sessionId = ev.session_id; },
+    done(ev){ sessionId = ev.session_id; finished = true; },
+  };
+
+  // The stream went away without the turn ending — on a phone, almost always
+  // the screen locking. The turn is still running on the Mac and saves when it
+  // finishes, so wait for that rather than reporting a failure.
+  // A question already on screen stays answerable: it is still waiting on
+  // the Mac, and its buttons still reach it.
+  const lost = () => {
+    moveOn();
+    if (sessionId){ handedOff = true; watchSession(sessionId); }
+    else handlers.error({message: 'Lost the connection before the reply started.'});
   };
 
   try {
@@ -1321,6 +1357,11 @@ async function ask(text){
       body: JSON.stringify({session_id: sessionId, message: text,
                             turn_id: currentTurn, thinking: thinkOn()})
     });
+    if (!res.ok){
+      const {error} = await res.json().catch(() => ({}));
+      handlers.error({message: error || `${res.status} ${res.statusText}`});
+      return;
+    }
 
     const reader = res.body.getReader(), decoder = new TextDecoder();
     let pending = '';
@@ -1336,21 +1377,26 @@ async function ask(text){
         if (handlers[ev.type]) handlers[ev.type](ev);
       }
     }
+    if (!finished) lost();
   } catch (err) {
     if (err.name === 'AbortError') {
       handlers.cancelled();
     } else {
-      handlers.error({message: String(err)});
+      lost();
     }
   } finally {
     if (body) body.innerHTML = render(buffer);   // last word, unbatched
     moveOn(); stick();
-    // An approval still on screen belongs to a turn that no longer exists.
-    closeApprovals();
+    // An approval still on screen belongs to a turn that no longer exists —
+    // unless the turn is still going and the watcher has taken it over.
+    if (!handedOff) closeApprovals(asked);
     busy = false; currentTurn = null; turnAbort = null;
     send.style.display = ''; send.disabled = false;
     $('#stop').style.display = 'none';
-    showActions();
+    // Retry and Edit would unwind a turn the Mac is still working on. They
+    // come back when it lands and the watcher redraws the chat.
+    if (handedOff) stream.querySelector('.acts')?.remove();
+    else showActions();
     loadSessions();
     focusInput();
   }
@@ -1826,9 +1872,41 @@ async function openSession(id){
     }
   }
 
+  // Cards wiped by the redraw can no longer be answered from the keyboard.
+  for (const open of [...openApprovals.keys()])
+    if (!document.getElementById('ask-' + open)) openApprovals.delete(open);
+
   closeOverlays();
-  showActions();
+  if (data.running){ watchSession(id); syncApprovals(id, data.approvals); }
+  else showActions();
   stuck = true; stick();
+}
+
+// A turn still running on the Mac with no page attached — the phone locked
+// mid-answer, or the chat was reopened from somewhere else. Poll until it has
+// saved, then redraw the chat with the answer in it. Failed polls are ignored:
+// a phone coming back from sleep is offline for a moment before Tailscale
+// reconnects, and that is not a reason to give up.
+// One timer per chat, however many times it is opened while running; the note
+// is per view, because reopening the chat redraws the stream underneath it.
+const WATCH_NOTE = 'still working on this on your Mac — the answer will appear here';
+const WAITING_NOTE = 'waiting for your answer above — the turn carries on once you give it';
+const watched = new Set();
+function watchSession(id){
+  if (!document.querySelector(`.working[data-watch="${id}"]`))
+    working(WATCH_NOTE).dataset.watch = id;
+  if (watched.has(id)) return;
+  watched.add(id);
+  const timer = setInterval(async () => {
+    let data;
+    try { data = await get('/api/session/' + id); } catch { return; }
+    if (data.running) return syncApprovals(id, data.approvals);
+    clearInterval(timer);
+    watched.delete(id);
+    document.querySelectorAll(`.working[data-watch="${id}"]`).forEach(el => el.remove());
+    loadSessions();
+    if (sessionId === id && !busy) openSession(id);
+  }, 4000);
 }
 
 function newSession(){

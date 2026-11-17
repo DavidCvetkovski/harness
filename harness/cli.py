@@ -61,10 +61,27 @@ def start_model():
     return False
 
 
+def serving_port(pid, port):
+    """True if this harness.server process was started on `port`."""
+    command = shell("ps", "-o", "command=", "-p", str(pid))
+    return f"--port {port}" in command
+
+
 def start_app(args):
-    if alive(app_url(args.port)) or pids(APP_PROCESS):
+    # Match the port too. APP_PROCESS alone matches a copy serving *any* port,
+    # so a forgotten `harness --port 8499` made this return without ever
+    # binding 8420 — and Harness.app then waited 90s for a server that was
+    # never going to start.
+    if alive(app_url(args.port)):
         print(f"app already running on :{args.port}")
         return
+    other = [p for p in pids(APP_PROCESS) if not serving_port(p, args.port)]
+    if pids(APP_PROCESS) and not other:
+        print(f"app already running on :{args.port}")
+        return
+    if other:
+        print(f"note: another copy is running on a different port "
+              f"(pid {other[0]}); starting this one on :{args.port}")
 
     command = [sys.executable, "-m", "harness.server", "--port", str(args.port)]
     for flag in ("remote", "lan", "no_browser"):
@@ -74,7 +91,9 @@ def start_app(args):
 
     for _ in range(30):
         time.sleep(1)
-        if alive(app_url(args.port)) or pids(APP_PROCESS):
+        # Only our port counts — a copy on another port would end the wait
+        # immediately and leave the caller thinking this one had come up.
+        if alive(app_url(args.port)):
             break
 
     # The app prints the phone URL and QR code on startup; show what it said.

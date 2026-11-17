@@ -144,6 +144,20 @@ def is_secret(path):
                for secret in SECRET_PATHS)
 
 
+def declined(sink, what):
+    """
+    What a tool reports when its approval came back no.
+
+    Only "you declined" when somebody did. A turn stopped while the question
+    was on screen, or a question nobody answered all day, also comes back no,
+    and the transcript claiming a refusal you never gave is how the model ends
+    up apologising for a decision you didn't make.
+    """
+    if sink is not None and sink.cancelled():
+        return "Error: the turn was stopped before this was approved."
+    return f"Error: the user declined {what}."
+
+
 def confirm_secret(path, sink, verb):
     """
     Ask before a credential directory is read. True if it may go ahead.
@@ -240,19 +254,91 @@ def _whole_number(value, fallback, low, high):
         return fallback
 
 
+# Documents are read as their words, not their bytes. A PDF opened as text is
+# thousands of lines of object syntax with the words compressed out of reach:
+# asked to find a job matching a CV, the model read three CVs that way, learned
+# nothing from any of them, guessed from the link annotations, and spent 12K
+# tokens of context doing it. macOS ships both extractors, so nothing new is
+# installed — PDFKit through JavaScript for Automation for PDFs, textutil for
+# Word, RTF and OpenDocument.
+PDF_SCRIPT = """
+ObjC.import('PDFKit');
+function run(argv) {
+  const doc = $.PDFDocument.alloc.initWithURL($.NSURL.fileURLWithPath(argv[0]));
+  if (doc.isNil()) return '\\u0000unreadable';
+  if (doc.isLocked) return '\\u0000locked';
+  const text = doc.string;
+  return text.isNil() ? '' : text.js;
+}
+"""
+TEXTUTIL_TYPES = (".doc", ".docx", ".rtf", ".odt", ".wordml", ".webarchive")
+EXTRACT_TIMEOUT = 60
+
+
+class Unreadable(Exception):
+    """A file read_file recognised but cannot turn into text."""
+
+
+def document_text(path):
+    """
+    The text of a PDF or word-processor file, and what kind it was.
+
+    Returns (None, None) for anything else, which is read as plain text. Other
+    binary files are refused outright: a JPEG decoded as UTF-8 is pages of
+    replacement characters that cost context and tell the model nothing.
+    """
+    with open(path, "rb") as handle:
+        head = handle.read(8192)
+    if head.startswith(b"%PDF-"):
+        kind, command = "PDF", ["osascript", "-l", "JavaScript", "-e", PDF_SCRIPT, path]
+    elif path.lower().endswith(TEXTUTIL_TYPES):
+        kind, command = "document", ["textutil", "-convert", "txt", "-stdout", path]
+    elif b"\0" in head:
+        raise Unreadable(f"{path} is a binary file, not text.")
+    else:
+        return None, None
+
+    try:
+        done = subprocess.run(command, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              timeout=EXTRACT_TIMEOUT)
+    except FileNotFoundError:
+        raise Unreadable(f"{path} is a {kind}, and extracting its text needs "
+                         "macOS.") from None
+    except subprocess.TimeoutExpired:
+        raise Unreadable(f"extracting the text of {path} took over "
+                         f"{EXTRACT_TIMEOUT}s.") from None
+
+    text = done.stdout
+    if text.startswith("\0locked"):
+        raise Unreadable(f"{path} is password-protected.")
+    if done.returncode or text.startswith("\0"):
+        raise Unreadable(f"{path} looks like a {kind} but could not be opened.")
+    if not text.strip():
+        raise Unreadable(f"{path} has no text in it — most likely a scan, "
+                         "which is images of pages rather than words.")
+    return text, kind
+
+
 def read_file(args, cfg, sink):
     path = resolve(args.get("path", ""), cfg)
     if not os.path.isfile(path):
         return f"Error: not a file: {path}"
     if not confirm_secret(path, sink, "Read"):
-        return "Error: the user declined to share this file."
+        return declined(sink, "to share this file")
 
     start = _whole_number(args.get("start_line", 1), 1, 1, 10_000_000)
     count = _whole_number(args.get("num_lines", 100), 100, 1, 500)
 
     try:
-        with open(path, errors="replace") as handle:
-            lines = handle.readlines()
+        text, kind = document_text(path)
+        if text is None:
+            with open(path, errors="replace") as handle:
+                lines = handle.readlines()
+        else:
+            lines = text.splitlines(keepends=True)
+    except Unreadable as exc:
+        return f"Error: {exc}"
     except OSError as exc:
         return f"Error: {exc}"
 
@@ -267,8 +353,10 @@ def read_file(args, cfg, sink):
     last = start - 1 + len(shown)
 
     # Numbered, because the edit tool is told to quote exact text back and
-    # line numbers are how the model refers to what it is looking at.
-    out = [f"File: {path} (lines {start}-{last} of {total})"]
+    # line numbers are how the model refers to what it is looking at. An
+    # extracted document says so, or the model tries edit_file on a PDF.
+    source = f", text extracted from the {kind}" if kind else ""
+    out = [f"File: {path} (lines {start}-{last} of {total}{source})"]
     out += [f"{n:4d} | {line.rstrip(chr(13) + chr(10))}"
             for n, line in enumerate(shown, start=start)]
     if last < total:
@@ -299,7 +387,7 @@ def write_file(args, cfg, sink):
 
     if (needs_file_approval(path, cfg)
             and not sink.confirm("Write this file?", "\n".join(detail), "write_file")):
-        return "Error: the user declined to write this file."
+        return declined(sink, "to write this file")
 
     try:
         parent = os.path.dirname(path)
@@ -351,7 +439,7 @@ def edit_file(args, cfg, sink):
 
     if (needs_file_approval(path, cfg)
             and not sink.confirm("Apply this edit?", "\n".join(detail), "edit_file")):
-        return "Error: the user declined this edit."
+        return declined(sink, "this edit")
 
     try:
         with open(path, "w") as handle:
@@ -371,11 +459,11 @@ def run_command(args, cfg, sink):
     # whatever the mode.
     for token in _arguments(command):
         if not confirm_secret(token, sink, "Run a command that reads"):
-            return "Error: the user declined to run this command."
+            return declined(sink, "to run this command")
 
     if needs_confirmation(command, cfg) and not sink.confirm(
             "Allow this command?", f"\n  RUN  {command}", "run_command"):
-        return "Error: the user declined to run this command."
+        return declined(sink, "to run this command")
 
     if sink and sink.cancelled():
         return "Error: command execution cancelled by user."
@@ -502,8 +590,9 @@ SCHEMAS = [
     _schema("list_files", "List the files in a directory.",
             path="Directory path."),
     _schema("read_file",
-            "Read a text file, numbered by line. Long files come back a page "
-            "at a time — read on with start_line.",
+            "Read a file, numbered by line. PDFs and Word, RTF or OpenDocument "
+            "files come back as their text. Long files come back a page at a "
+            "time — read on with start_line.",
             required_params=["path"],
             path="File path.",
             start_line="Optional 1-indexed starting line number (default: 1).",
