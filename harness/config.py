@@ -186,6 +186,16 @@ def apply_preset(name):
 # Cards tune the two modes separately (Qwen asks for 1.0/0.95 while thinking
 # against 0.7/0.80 while not), and listing just the deltas means a model that
 # tunes nothing keeps whatever is configured.
+#
+# Two optional keys:
+#   min_p   sent with every request when present. Left out, llama-server uses
+#           its own default of 0.05.
+#   mmproj  the vision projector that goes with these weights, by file name,
+#           kept next to them in MODELS_DIR. model.sh passes it as --mmproj,
+#           which is what lets the model take images at all.
+#
+# Matched in order, first prefix wins — so a fine-tune that shares a base
+# model's prefix has to come before it, or it is tuned as the base model.
 MODEL_PROFILES = {
     "nanbeige":    {"kv_kb": 167.5, "ctx": 16384,
                     "temperature": 0.6, "top_p": 0.95, "top_k": 20,
@@ -193,15 +203,22 @@ MODEL_PROFILES = {
     "qwen3.8-27b": {"kv_kb": 64.0, "ctx": 32768,
                     "temperature": 0.7, "top_p": 0.80, "top_k": 20,
                     "when_thinking": {"temperature": 1.0, "top_p": 0.95}},
-    # Plain full attention on all 40 layers (8 KV heads x 128 dim), so context
-    # costs 2.5x what it does on the 27B. Qwen3's card asks for 0.6 while
-    # thinking, but sampling_for only ever raises temperature, so just top_p
-    # changes — 0.7 is close enough to think in.
+    # HauhauCS's uncensored fine-tune, with its vision projector. Sampled at
+    # Qwen's thinking-mode settings in both modes, on purpose: no
+    # `when_thinking`, so a reasoning turn is not pushed up to 1.0.
+    "qwen3.5-9b-uncensored-hauhaucs": {
+        "kv_kb": 32.0, "ctx": 32768,
+        "temperature": 0.6, "top_p": 0.95, "top_k": 20, "min_p": 0.0,
+        "mmproj": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"},
     # Same hybrid layout and the same card numbers as the 27B. Also covers the
     # stock Qwen3.5-9B — the abliterated file is named to share the prefix.
     "qwen3.5-9b":  {"kv_kb": 32.0, "ctx": 32768,
                     "temperature": 0.7, "top_p": 0.80, "top_k": 20,
                     "when_thinking": {"temperature": 1.0, "top_p": 0.95}},
+    # Plain full attention on all 40 layers (8 KV heads x 128 dim), so context
+    # costs 2.5x what it does on the 27B. Qwen3's card asks for 0.6 while
+    # thinking, but sampling_for only ever raises temperature, so just top_p
+    # changes — 0.7 is close enough to think in.
     "qwen3-14b":   {"kv_kb": 160.0, "ctx": 12288,
                     "temperature": 0.7, "top_p": 0.80, "top_k": 20,
                     "when_thinking": {"top_p": 0.95}},
@@ -235,9 +252,13 @@ def sampling_for(cfg, thinking, path=None):
     """
     values = {"temperature": cfg["temperature"], "top_p": cfg["top_p"],
               "top_k": cfg["top_k"]}
+    profile = profile_for(current_model() if path is None else path)
+    # Not a setting, so it comes from the profile alone — and only when the
+    # card asks for one, leaving every other model on llama-server's default.
+    if "min_p" in profile:
+        values["min_p"] = profile["min_p"]
     if not thinking:
         return values
-    profile = profile_for(current_model() if path is None else path)
     for key, value in profile.get("when_thinking", {}).items():
         values[key] = max(values[key], value) if key == "temperature" else value
     return values
@@ -268,6 +289,23 @@ def metal_budget_gb():
     return (total / 1073741824) * 2 / 3
 
 
+def is_projector(name):
+    """
+    A vision projector rather than a model. llama.cpp names them mmproj-*, and
+    one loaded as a model on its own fails — so they are never offered as one.
+    """
+    return os.path.basename(name).lower().startswith("mmproj")
+
+
+def projector_for(path):
+    """The vision projector that goes with a model, if it has one on disk."""
+    name = profile_for(path).get("mmproj")
+    if not name:
+        return ""
+    candidate = os.path.join(os.path.dirname(path), name)
+    return candidate if os.path.isfile(candidate) else ""
+
+
 def list_models():
     """Every GGUF on disk, with its size and whether it will fit in memory."""
     found = []
@@ -277,7 +315,7 @@ def list_models():
         return found
     budget = metal_budget_gb()
     for name in names:
-        if not name.endswith(".gguf"):
+        if not name.endswith(".gguf") or is_projector(name):
             continue
         path = os.path.join(MODELS_DIR, name)
         try:
@@ -285,6 +323,11 @@ def list_models():
         except OSError:
             continue
         profile = profile_for(path)
+        # A projector is loaded alongside the weights and onto the GPU with
+        # them, so it counts against the same budget — and against the disk.
+        projector = projector_for(path)
+        if projector:
+            size += os.path.getsize(projector)
         # The same estimate model.sh prints: weights, a flat allowance for the
         # compute buffers, and the KV cache at q8_0 — half its f16 cost.
         estimate = (size / 1e9 + 0.4
@@ -298,6 +341,7 @@ def list_models():
         found.append({"name": name[:-5], "path": path,
                       "gb": round(size / 1e9, 1), "est_gb": round(estimate, 1),
                       "ctx": profile["ctx"], "fit": fit,
+                      "vision": bool(projector),
                       "budget_gb": round(budget, 1)})
     return found
 
@@ -316,7 +360,7 @@ def current_model():
 
 
 def set_model(path):
-    if not os.path.isfile(path):
+    if not os.path.isfile(path) or is_projector(path):
         return False
     os.makedirs(BASE, exist_ok=True)
     with open(MODEL_CHOICE_FILE, "w") as handle:

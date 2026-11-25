@@ -2093,7 +2093,7 @@ function paintModels(d){
     ? d.models.map(m => `<button class="row ${m.active ? 'on' : ''}" data-model="${esc(m.path)}">
         <span class="dot"></span>
         <span class="nm"><b>${esc(m.name)}</b>
-          <i>${m.gb} GB on disk · ${ctxLabel(m.ctx)} context · ~${m.est_gb} GB loaded</i></span>
+          <i>${m.gb} GB on disk · ${ctxLabel(m.ctx)} context · ~${m.est_gb} GB loaded${m.vision ? ' · vision' : ''}</i></span>
         <span class="sub ${m.fit}">${badge[m.fit] || ''}</span></button>`).join('')
     : '<div class="note" style="margin:0">No models found in ~/llm/models</div>';
 

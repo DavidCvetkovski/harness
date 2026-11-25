@@ -59,9 +59,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Fall back to whatever is on disk, so a fresh install still starts.
+# Fall back to whatever is on disk, so a fresh install still starts. Vision
+# projectors (mmproj-*) share the folder but are not models in their own right.
 if [[ ! -f "$MODEL" ]]; then
-    MODEL="$(ls -1 "$MODELS_DIR"/*.gguf 2>/dev/null | head -1 || true)"
+    MODEL="$(ls -1 "$MODELS_DIR"/*.gguf 2>/dev/null | grep -vi '/mmproj[^/]*$' \
+             | head -1 || true)"
 fi
 
 # Preflight — fail with something actionable rather than a stack trace.
@@ -99,6 +101,11 @@ fi
 # llama-server directly: harness.agent sends temperature/top_p/top_k from
 # config.json on every request. MODEL_PROFILES in config.py is the table that
 # governs chat — keep the two in step.
+#
+# First match wins, so a fine-tune has to come before the base model whose
+# prefix it shares. MMPROJ_NAME is the vision projector kept next to the
+# weights, for models that take images.
+MMPROJ_NAME="" ; DEF_MIN_P="" ; IMAGE_MIN_TOKENS=""
 shopt -s nocasematch
 case "$(basename "$MODEL")" in
     nanbeige*)
@@ -126,6 +133,18 @@ case "$(basename "$MODEL")" in
         # the agent swaps it in per request, which these flags cannot do.
         DEF_TEMP=0.7 ; DEF_TOP_P=0.80 ; DEF_TOP_K=20
         ;;
+    qwen3.5-9b-uncensored-hauhaucs*)
+        # Same weights layout as the line below, plus a ~0.9 GB BF16 vision
+        # projector. Qwen's thinking-mode sampling, in both modes.
+        KV_KB_PER_TOKEN=32.0 ; DEF_CTX=32768
+        DEF_TEMP=0.6 ; DEF_TOP_P=0.95 ; DEF_TOP_K=20 ; DEF_MIN_P=0
+        MMPROJ_NAME="mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+        # Left to the model's own minimum, a 640x400 screenshot became ~260
+        # tokens and the model got the shapes right but read "HARNESS 42" as
+        # "HIV". llama.cpp warns Qwen-VL wants at least 1024; launch-only, so
+        # config.py has no copy of it.
+        IMAGE_MIN_TOKENS=1024
+        ;;
     qwen3.5-9b*)
         # Hybrid like the 27B: 8 of 32 layers keep a KV cache (4 KV heads x
         # 256 dim), so 32 KB/token at f16. ~5.7 GB of Q4_K_M weights plus 32K
@@ -152,13 +171,28 @@ CTX="${CTX:-$DEF_CTX}"
 TEMP="${TEMP:-$DEF_TEMP}"
 TOP_P="${TOP_P:-$DEF_TOP_P}"
 TOP_K="${TOP_K:-$DEF_TOP_K}"
+MIN_P="$DEF_MIN_P"
+
+# Only attached if it is actually there: a missing projector should cost you
+# image input, not the whole server.
+MMPROJ=""
+if [[ -n "$MMPROJ_NAME" ]]; then
+    if [[ -f "$(dirname "$MODEL")/$MMPROJ_NAME" ]]; then
+        MMPROJ="$(dirname "$MODEL")/$MMPROJ_NAME"
+    else
+        echo "Note: vision projector $MMPROJ_NAME not found — starting text-only."
+    fi
+fi
+
 kv_scale=1.0
 [[ -n "$KV_TYPE" ]] && kv_scale=0.5
-est_gb=$(awk -v bytes="$(stat -f%z "$MODEL")" -v c="$CTX" \
+weights=$(stat -f%z "$MODEL")
+[[ -n "$MMPROJ" ]] && weights=$(( weights + $(stat -f%z "$MMPROJ") ))
+est_gb=$(awk -v bytes="$weights" -v c="$CTX" \
              -v k="$KV_KB_PER_TOKEN" -v s="$kv_scale" \
     'BEGIN { printf "%.1f", bytes/1e9 + 0.4 + (c * k * s) / 1048576 }')
 
-echo "$(basename "$MODEL" .gguf)  |  ${CTX} ctx  |  ~${est_gb} GB  |  http://${HOST}:${PORT}"
+echo "$(basename "$MODEL" .gguf)${MMPROJ:+ + vision}  |  ${CTX} ctx  |  ~${est_gb} GB  |  http://${HOST}:${PORT}"
 
 # Warn before the machine starts swapping rather than after. The ceiling that
 # matters is Metal's, not the machine's: with -ngl 99 the weights and the whole
@@ -199,6 +233,8 @@ echo
 # key, so it must not be exposed on 0.0.0.0.
 exec "$LLAMA_BIN" \
     -m "$MODEL" \
+    ${MMPROJ:+--mmproj "$MMPROJ"} \
+    ${MMPROJ:+${IMAGE_MIN_TOKENS:+--image-min-tokens "$IMAGE_MIN_TOKENS"}} \
     --host "$HOST" \
     --port "$PORT" \
     -ngl 99 \
@@ -207,4 +243,5 @@ exec "$LLAMA_BIN" \
     ${KV_TYPE:+-ctk "$KV_TYPE" -ctv "$KV_TYPE"} \
     --temp "$TEMP" \
     --top-p "$TOP_P" \
-    --top-k "$TOP_K"
+    --top-k "$TOP_K" \
+    ${MIN_P:+--min-p "$MIN_P"}

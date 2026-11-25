@@ -152,18 +152,97 @@ class AccessToken(TempStateTest):
         self.assertGreaterEqual(len(settings.access_token()), 24)
 
 
-class Sampling(unittest.TestCase):
-    """Reasoning turns are sampled differently from instruct ones."""
+HUIHUI = "qwen3.5-9b-huihui-abliterated-Q4_K_M.gguf"
+HAUHAU = "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf"
+HAUHAU_MMPROJ = "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+
+
+class Sampling(TempStateTest):
+    """
+    Reasoning turns are sampled differently from instruct ones — unless the
+    profile says otherwise.
+
+    These name the model rather than asking which one is picked: that used to
+    read the real choice file, so the result depended on the machine.
+    """
 
     def test_thinking_and_instruct_differ(self):
         cfg = settings.load_config()
-        self.assertNotEqual(settings.sampling_for(cfg, True),
-                            settings.sampling_for(cfg, False))
+        self.assertNotEqual(settings.sampling_for(cfg, True, HUIHUI),
+                            settings.sampling_for(cfg, False, HUIHUI))
 
     def test_every_sampling_key_is_a_number(self):
-        for thinking in (True, False):
-            for key, value in settings.sampling_for(settings.load_config(), thinking).items():
-                self.assertIsInstance(value, (int, float), f"{key}={value!r}")
+        for path in (HUIHUI, HAUHAU, "something-new.gguf"):
+            for thinking in (True, False):
+                for key, value in settings.sampling_for(
+                        settings.load_config(), thinking, path).items():
+                    self.assertIsInstance(value, (int, float), f"{key}={value!r}")
+
+    def test_a_fine_tune_is_not_tuned_as_its_base_model(self):
+        # Both names start "qwen3.5-9b", and the first prefix to match wins.
+        self.assertEqual(settings.profile_for(HAUHAU)["temperature"], 0.6)
+        self.assertEqual(settings.profile_for(HUIHUI)["temperature"], 0.7)
+
+    def test_min_p_is_sent_only_when_the_profile_asks_for_it(self):
+        cfg = settings.load_config()
+        self.assertEqual(settings.sampling_for(cfg, False, HAUHAU)["min_p"], 0.0)
+        self.assertEqual(settings.sampling_for(cfg, True, HAUHAU)["min_p"], 0.0)
+        self.assertNotIn("min_p", settings.sampling_for(cfg, False, HUIHUI))
+
+    def test_a_profile_without_thinking_deltas_keeps_its_sampling(self):
+        cfg = dict(settings.load_config(), temperature=0.6, top_p=0.95, top_k=20)
+        self.assertEqual(settings.sampling_for(cfg, True, HAUHAU),
+                         settings.sampling_for(cfg, False, HAUHAU))
+
+
+class Models(TempStateTest):
+    """What the model list offers, and what it says each one costs."""
+
+    def place(self, name, size):
+        path = os.path.join(settings.MODELS_DIR, name)
+        with open(path, "wb") as handle:
+            handle.truncate(size)
+        return path
+
+    def test_a_projector_is_not_offered_as_a_model(self):
+        self.place(HAUHAU, 1000)
+        self.place(HAUHAU_MMPROJ, 1000)
+        self.assertEqual([m["name"] for m in settings.list_models()], [HAUHAU[:-5]])
+
+    def test_a_projector_counts_toward_disk_and_memory(self):
+        path = self.place(HAUHAU, 5_000_000_000)
+        alone = settings.list_models()[0]
+        self.assertFalse(alone["vision"])
+        self.place(HAUHAU_MMPROJ, 1_000_000_000)
+        paired = settings.list_models()[0]
+        self.assertTrue(paired["vision"])
+        self.assertEqual(settings.projector_for(path),
+                         os.path.join(settings.MODELS_DIR, HAUHAU_MMPROJ))
+        self.assertAlmostEqual(paired["gb"] - alone["gb"], 1.0, places=1)
+        self.assertAlmostEqual(paired["est_gb"] - alone["est_gb"], 1.0, places=1)
+
+    def test_another_models_projector_is_not_borrowed(self):
+        path = self.place(HUIHUI, 1000)
+        self.place(HAUHAU_MMPROJ, 1000)
+        self.assertEqual(settings.projector_for(path), "")
+
+    def test_a_projector_cannot_be_picked_as_the_model(self):
+        self.assertFalse(settings.set_model(self.place(HAUHAU_MMPROJ, 1000)))
+        self.assertTrue(settings.set_model(self.place(HAUHAU, 1000)))
+        self.assertEqual(settings.load_config()["temperature"], 0.6)
+
+    def test_model_sh_matches_the_profiles(self):
+        # model.sh launches the server and config.py tunes the chat; the two
+        # tables are kept by hand, and drifting apart is silent.
+        script = os.path.join(os.path.dirname(settings.__file__), "model.sh")
+        with open(script) as handle:
+            text = handle.read()
+        positions = [text.find(f"    {prefix}*)") for prefix in settings.MODEL_PROFILES]
+        self.assertNotIn(-1, positions, "a profile with no case in model.sh")
+        self.assertEqual(positions, sorted(positions), "listed in a different order")
+        for profile in settings.MODEL_PROFILES.values():
+            if profile.get("mmproj"):
+                self.assertIn(f'MMPROJ_NAME="{profile["mmproj"]}"', text)
 
 
 if __name__ == "__main__":
