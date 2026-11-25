@@ -1587,7 +1587,7 @@ def main():
     primary = "0.0.0.0" if args.lan else "127.0.0.1"
     try:
         servers = [Server((primary, PORT), Handler)]
-        if args.remote and SERVE_HOST and primary != "0.0.0.0" and SERVE_HOST != primary:
+        if args.remote and SERVE_HOST and primary != "0.0.0.0" and primary != SERVE_HOST:
             servers.append(make_tailnet_server(SERVE_HOST, PORT))
     except OSError as exc:
         if exc.errno != 48:
