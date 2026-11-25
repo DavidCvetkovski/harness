@@ -88,14 +88,19 @@ See [voice/README.md](voice/README.md).
 
 ## Safety
 
-Seven tools: list files, read, write, edit, search the web, fetch a page, run a
-shell command. The rules around them:
+Eleven tools: list files, find files by name, read, write, edit, search the
+web, fetch a page, run a shell command, check how the Mac is doing, look at a
+picture (with a vision model loaded), send an email.
+The rules around them:
 
 | Rule | Why |
 |---|---|
 | Writing or editing asks first, showing the exact change | The preview is the only thing between the model and your file |
 | `/System`, `/usr`, `/etc`, `/Library`, `~/.ssh`, `~/.zshrc` and friends are refused outright | Breaking these breaks the machine, not your work — no approval can authorise it |
-| Anything chained — pipes, `;`, `&&`, backticks — always asks | The first word of a pipeline tells you nothing about the rest of it |
+| Anything chained — pipes, `;`, `&`, `&&`, brackets, backticks — always asks | The first word of a pipeline tells you nothing about the rest of it |
+| Sending an email always asks, showing the recipients, text and every attachment | Mail leaves the machine and cannot be recalled — no setting switches this off |
+| Fetching an address on this Mac or the local network asks first | A web page can tell the model to fetch `127.0.0.1`, which is Harness itself |
+| Requests from other websites are refused | On `127.0.0.1` there is no token, so any page you visited could otherwise post to Harness |
 | Reading `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.harness` always asks, whatever the settings say | Tool output is kept verbatim in the session file, so a key read once is a key on disk |
 | Scheduled runs have the write tools switched off | Nobody is awake at 3am to approve anything, and a bare refusal just makes the model try again |
 
@@ -140,7 +145,7 @@ harness/
   cli.py             start / stop / status
   server.py          HTTP routes, streaming, approvals, admin actions
   agent.py           the loop: stream, call a tool, feed the result back
-  tools.py           the seven tools, and the guards around them
+  tools.py           the eleven tools, and the guards around them
   config.py          settings, presets, automations, access token
   ui.html            the whole front end, one file
   model.sh           llama.cpp launcher

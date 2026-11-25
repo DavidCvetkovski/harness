@@ -115,6 +115,12 @@ class CommandConfirmation(unittest.TestCase):
         # "I do not know" has to resolve to "ask".
         self.assertTrue(tools.needs_confirmation("echo 'unterminated", self.cfg))
 
+    def test_explicit_paths_with_safe_basenames_ask(self):
+        for mode in ("always", "destructive"):
+            cfg = {"approve_commands": mode, "extra_safe_commands": []}
+            for command in ("./cat secret.txt", "/tmp/ls -la"):
+                self.assertTrue(tools.needs_confirmation(command, cfg), (mode, command))
+
 
 class FileApproval(unittest.TestCase):
     """The three settings for when a file change stops and asks."""
@@ -205,6 +211,89 @@ class SecretsAreNeverSilent(TempStateTest):
         # safe: it cannot answer, so it does not get to read the key.
         from harness.server import QuietSink
         self.assertFalse(tools.confirm_secret(self.key, QuietSink(), "Read"))
+
+
+class ChainingFoundWherever(unittest.TestCase):
+    """
+    Everything the shell would run beyond the first command asks first.
+
+    `echo` is on the safe list and nothing after it was looked at unless it
+    contained one of a short list of operators — which left out a lone `&`.
+    """
+
+    def setUp(self):
+        self.cfg = {"approve_commands": "always", "extra_safe_commands": []}
+
+    def test_a_backgrounded_command_asks(self):
+        self.assertTrue(tools.needs_confirmation("echo hi & rm -rf ~/x", self.cfg))
+        self.assertTrue(tools.needs_confirmation("ls &rm x", self.cfg))
+
+    def test_a_subshell_asks(self):
+        self.assertTrue(tools.needs_confirmation("ls (rm x)", self.cfg))
+
+    def test_operators_inside_quotes_are_just_text(self):
+        for command in ('grep "a|b" notes.txt', "echo 'one; two & three'"):
+            self.assertFalse(tools.needs_confirmation(command, self.cfg), command)
+
+    def test_substitution_inside_double_quotes_still_asks(self):
+        self.assertTrue(tools.needs_confirmation('echo "$(rm x)"', self.cfg))
+
+    def test_an_escaped_bracket_is_just_text(self):
+        # find's grouping brackets have to be escaped or quoted for the shell,
+        # and then they are arguments to find, not a subshell.
+        for command in (r'find ~ \( -iname "*cv*" -o -iname "*resume*" \) -type f',
+                        'find ~ "(" -name x ")"', r"ls a\&b"):
+            self.assertFalse(tools.needs_confirmation(command, self.cfg), command)
+
+    def test_an_unclosed_quote_asks(self):
+        self.assertTrue(tools.chained("echo 'unterminated & rm x"))
+
+
+class WhatActuallyRuns(unittest.TestCase):
+    """The relaxed setting judged a command by its first word, which may not be it."""
+
+    def setUp(self):
+        self.cfg = {"approve_commands": "destructive", "extra_safe_commands": []}
+
+    def test_a_wrapped_command_asks(self):
+        for command in ("env rm -rf ~/x", "nice -n 5 rm x", "nohup rm x",
+                        "xargs -a list rm", "command rm x", "time rm x"):
+            self.assertTrue(tools.needs_confirmation(command, self.cfg), command)
+
+    def test_an_assignment_in_front_asks(self):
+        self.assertTrue(tools.needs_confirmation("FOO=1 rm -rf ~/x", self.cfg))
+
+    def test_a_name_the_shell_rewrites_asks(self):
+        for command in ("{rm,-rf,x}", "$CMD x", "r* x"):
+            self.assertTrue(tools.needs_confirmation(command, self.cfg), command)
+
+    def test_overwriting_a_file_asks(self):
+        for command in ("cp new.txt old.txt", "sed -i '' s/a/b/ f.txt",
+                        "perl -i -pe s/a/b/ f.txt"):
+            self.assertTrue(tools.needs_confirmation(command, self.cfg), command)
+
+    def test_reading_with_sed_does_not(self):
+        self.assertFalse(tools.needs_confirmation("sed -n 1,5p f.txt", self.cfg))
+
+
+class SecretsByAnyRoute(unittest.TestCase):
+    """A credential file reached without naming its folder from the root."""
+
+    def test_a_relative_path_from_home_is_seen(self):
+        home = os.path.expanduser("~")
+        self.assertTrue(tools._reads_secret("cat .ssh/id_rsa", home))
+
+    def test_a_recursive_grep_of_a_folder_holding_keys_is_seen(self):
+        self.assertTrue(tools._reads_secret("grep -r PRIVATE ~"))
+        self.assertTrue(tools._reads_secret("grep -Rn BEGIN ~/"))
+
+    def test_a_plain_grep_or_another_folder_is_not(self):
+        self.assertFalse(tools._reads_secret("grep PRIVATE ~/notes.txt"))
+        self.assertFalse(tools._reads_secret("grep -r TODO /tmp/project"))
+
+    def test_home_variable_secret_is_seen(self):
+        self.assertTrue(tools._reads_secret("cat $HOME/.ssh/id_rsa"))
+        self.assertTrue(tools._reads_secret("cat ${HOME}/.harness/access-token"))
 
 
 if __name__ == "__main__":

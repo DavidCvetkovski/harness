@@ -245,5 +245,45 @@ class Models(TempStateTest):
                 self.assertIn(f'MMPROJ_NAME="{profile["mmproj"]}"', text)
 
 
+
+class NumbersAreNumbers(TempStateTest):
+    """What a request is built from has to be usable, whatever the file says."""
+
+    def test_a_blank_or_wrong_value_falls_back(self):
+        settings._write(settings.CONFIG_FILE, {"max_tokens": None, "max_steps": "lots",
+                                               "temperature": float("nan")})
+        cfg = settings.load_config()
+        self.assertEqual(cfg["max_tokens"], settings.DEFAULTS["max_tokens"])
+        self.assertEqual(cfg["max_steps"], settings.DEFAULTS["max_steps"])
+        self.assertEqual(cfg["temperature"], settings.DEFAULTS["temperature"])
+
+    def test_a_number_written_as_text_is_read_as_one(self):
+        settings._write(settings.CONFIG_FILE, {"max_tokens": "2000"})
+        self.assertEqual(settings.load_config()["max_tokens"], 2000)
+
+    def test_out_of_range_is_brought_into_range(self):
+        settings._write(settings.CONFIG_FILE, {"max_steps": 0, "top_p": 7})
+        cfg = settings.load_config()
+        self.assertEqual(cfg["max_steps"], 1)
+        self.assertEqual(cfg["top_p"], 1.0)
+
+    def test_saving_answers_with_what_will_be_used(self):
+        self.assertEqual(settings.save_config({"max_tokens": None})["max_tokens"],
+                         settings.DEFAULTS["max_tokens"])
+
+    def test_saving_leaves_no_temporary_files(self):
+        for n in range(3):
+            settings.save_config({"temperature": n / 10})
+        self.assertEqual(sorted(os.listdir(settings.BASE)), ["config.json", "sessions"])
+
+
+class BrokenSchedules(unittest.TestCase):
+
+    def test_a_bad_interval_is_not_due_rather_than_an_exception(self):
+        # Raised, it took every other automation down with it for that tick.
+        entry = {"enabled": True, "schedule": {"kind": "interval", "minutes": "often"}}
+        self.assertFalse(settings.is_due(entry))
+
+
 if __name__ == "__main__":
     unittest.main()

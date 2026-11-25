@@ -51,7 +51,8 @@ class TempStateTest(unittest.TestCase):
 
         self._saved = {name: getattr(settings, name) for name in
                        ("BASE", "CONFIG_FILE", "AUTOMATIONS_FILE", "TOKEN_FILE",
-                        "MODEL_CHOICE_FILE", "SESSION_DIR", "MODELS_DIR")}
+                        "MODEL_CHOICE_FILE", "SESSION_DIR", "UPLOAD_DIR",
+                        "CERTS_DIR", "MODELS_DIR")}
         state = os.path.join(self.tmp, "state")
         settings.BASE = state
         settings.CONFIG_FILE = os.path.join(state, "config.json")
@@ -59,6 +60,8 @@ class TempStateTest(unittest.TestCase):
         settings.TOKEN_FILE = os.path.join(state, "access-token")
         settings.MODEL_CHOICE_FILE = os.path.join(state, "model")
         settings.SESSION_DIR = os.path.join(state, "sessions")
+        settings.UPLOAD_DIR = os.path.join(state, "uploads")
+        settings.CERTS_DIR = os.path.join(state, "certs")
         settings.MODELS_DIR = os.path.join(self.tmp, "models")
         os.makedirs(settings.SESSION_DIR)
         os.makedirs(settings.MODELS_DIR)

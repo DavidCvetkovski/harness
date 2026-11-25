@@ -20,6 +20,7 @@ import http.client
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import urllib.error
@@ -30,7 +31,11 @@ from . import tools
 
 SERVER = "http://127.0.0.1:8080/v1/chat/completions"
 PROPS = "http://127.0.0.1:8080/props"
-REQUEST_TIMEOUT = 300    # generation runs ~30 t/s, so be patient
+# How long to wait for the next piece of a reply. The first piece is the slow
+# one: the whole prompt is read before anything comes back, and a long prompt on
+# a Mac in Low Power Mode can take minutes. At 300 the read timed out, the error
+# was swallowed, and the turn ended on an empty reply with nothing to say why.
+REQUEST_TIMEOUT = 900
 
 # What trim_history keeps when it is not told otherwise: roughly 8K tokens of
 # conversation, leaving the rest of a 16K window for the system prompt, the
@@ -204,7 +209,10 @@ def save_session(session_id, history):
     if not history:
         return
     title = next((m.get("content") for m in history
-                  if m.get("role") == "user" and m.get("content")), "untitled")
+                  if m.get("role") == "user" and m.get("content")), "")
+    if not title:
+        has_img = any(m.get("role") == "user" and m.get("images") for m in history)
+        title = "(image)" if has_img else "untitled"
     try:
         settings._write(session_path(session_id), {
             "id": session_id,
@@ -293,6 +301,10 @@ def as_markdown(session_id):
     for message in session.get("messages", []):
         role, content = message.get("role"), (message.get("content") or "").strip()
         if role == "user":
+            if message.get("images"):
+                names = ", ".join(os.path.basename(p) for p in message["images"])
+                note = f"*[Attached: {names}]*"
+                content = f"{note}\n\n{content}".strip() if content else note
             lines += ["## You", "", content, ""]
         elif role == "assistant" and content:
             lines += ["## Harness", "", content, ""]
@@ -306,23 +318,34 @@ def as_markdown(session_id):
     return "\n".join(lines)
 
 
-def context_window():
+def server_props():
     """
-    The context llama-server is actually running with.
+    What the running llama-server can do: its context window, and whether it
+    can see images.
 
     Asked of the server rather than read from the model's profile, because
-    `harness model -c` overrides the profile. The profile is the fallback for
-    when the server cannot say.
+    `harness model -c` overrides the profile, and only the server knows
+    whether a vision projector was actually loaded. The profile is the
+    fallback for when the server cannot say.
     """
+    found = {"n_ctx": settings.profile_for(settings.current_model())["ctx"],
+             "vision": False}
     try:
         with urllib.request.urlopen(PROPS, timeout=2) as response:
-            n_ctx = int(json.load(response)["default_generation_settings"]["n_ctx"])
+            props = json.load(response)
+        n_ctx = int(props["default_generation_settings"]["n_ctx"])
         if n_ctx > 0:
-            return n_ctx
-    except (OSError, ValueError, KeyError, TypeError, urllib.error.URLError,
-            http.client.HTTPException):
+            found["n_ctx"] = n_ctx
+        found["vision"] = bool((props.get("modalities") or {}).get("vision"))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError,
+            urllib.error.URLError, http.client.HTTPException):
         pass
-    return settings.profile_for(settings.current_model())["ctx"]
+    return found
+
+
+def context_window():
+    """The context llama-server is actually running with."""
+    return server_props()["n_ctx"]
 
 
 def history_budget(cfg, n_ctx):
@@ -357,7 +380,7 @@ def trim_history(history, budget=HISTORY_CHAR_BUDGET):
     never changes, so the chosen one holds still while the conversation grows
     by about a third of the budget before it has to move again.
     """
-    sizes = [len(str(message.get("content") or "")) + 200 for message in history]
+    sizes = [_size(message) for message in history]
     total = sum(sizes)
     if total <= budget:
         return list(history)
@@ -373,10 +396,36 @@ def trim_history(history, budget=HISTORY_CHAR_BUDGET):
         before += sizes[index]
 
     # The current exchange alone is over budget — no cut at an exchange
-    # boundary leaves room — so fall back to dropping single messages.
+    # boundary leaves room. Its question stays if it fits at all: dropping it
+    # left the model reading tool output with no idea what it was looking for.
+    # What goes instead is the oldest work in the exchange, a whole step at a
+    # time, so a tool result never outlives the call that asked for it.
+    start = max((i for i, m in enumerate(history) if m.get("role") == "user"),
+                default=-1)
+    question = [history[start]] if start >= 0 else []
+    if question and _size(question[0]) <= budget:
+        steps = []
+        for message in history[start + 1:]:
+            if message.get("role") == "tool" and steps:
+                steps[-1].append(message)
+            else:
+                steps.append([message])
+        room = budget - _size(question[0])
+        kept = []
+        for step in reversed(steps):
+            cost = sum(_size(m) for m in step)
+            if cost > room and kept:
+                break
+            kept = step + kept
+            room -= cost
+        while kept and kept[0].get("role") == "tool":
+            kept.pop(0)
+        return question + kept
+
+    # Not even the question fits, so keep what is newest and drop the rest.
     kept = []
     for message in reversed(history):
-        budget -= len(str(message.get("content") or "")) + 200
+        budget -= _size(message)
         if budget < 0:
             break
         kept.append(message)
@@ -386,6 +435,102 @@ def trim_history(history, budget=HISTORY_CHAR_BUDGET):
     while kept and kept[0].get("role") == "tool":
         kept.pop(0)
     return kept
+
+
+# What one picture costs, in the characters the budget counts. A shown image
+# takes ~1,000-1,400 tokens of context, which is about this much text.
+IMAGE_CHARS = 3500
+
+
+def _size(message):
+    """What a message costs the budget: its words, its thinking, and overhead."""
+    images = (1 if message.get("image") else 0) + len(message.get("images") or ())
+    return (len(str(message.get("content") or ""))
+            + len(str(message.get("reasoning_content") or ""))
+            + IMAGE_CHARS * images + 200)
+
+
+def for_model(history):
+    """
+    The conversation as the model is sent it.
+
+    Its thinking goes back with it for the exchange in progress, and only that
+    one. Sent without, the chat template shows every earlier step of the turn
+    as an empty <think></think> followed by a tool call, and the model copies
+    the pattern: it writes its next call inside its thinking and never closes
+    it, so the server files the whole step as reasoning — no answer, no tool
+    call, and a turn that simply stopped. Measured against the running model,
+    8 of 12 second steps hid their call that way with the thinking dropped,
+    and none of 12 with it kept. Earlier exchanges go without it, which is all
+    the template keeps of them anyway.
+    """
+    last = max((i for i, m in enumerate(history) if m.get("role") == "user"),
+               default=-1)
+    sent = []
+    for index, message in enumerate(history):
+        current = index > last
+        if "reasoning_content" in message and not current:
+            message = {k: v for k, v in message.items() if k != "reasoning_content"}
+        if "image" in message:
+            # A picture view_image showed goes back with its tool result for the
+            # rest of the turn, as the image itself. The session keeps only its
+            # path; a later turn gets the text alone, which is all it needs.
+            url = tools.image_url(message["image"]) if current else ""
+            message = {k: v for k, v in message.items() if k != "image"}
+            if url:
+                message["content"] = [
+                    {"type": "text", "text": str(message.get("content") or "")},
+                    {"type": "image_url", "image_url": {"url": url}}]
+        if "images" in message:
+            # Pictures attached by the user go back only for the active
+            # exchange (index == last), just like view_image results. Earlier
+            # turns keep only the text so images don't eat future context.
+            paths = list(message["images"] or ()) if index == last else []
+            message = {k: v for k, v in message.items() if k != "images"}
+            urls = [u for u in (tools.image_url(p) for p in paths) if u]
+            if urls:
+                parts = [{"type": "text", "text": str(message.get("content") or "")}]
+                parts += [{"type": "image_url", "image_url": {"url": u}} for u in urls]
+                message["content"] = parts
+            elif not message.get("content"):
+                message["content"] = "[attached image]"
+        sent.append(message)
+    return sent
+
+
+def system_prompt(cfg):
+    """
+    The configured prompt, plus what the model cannot know about this machine.
+
+    Without the home folder in front of it the model guessed: it listed
+    /Users/username/Downloads, then /Users/$(whoami)/Downloads, then asked the
+    user where their own Downloads folder was. The date is there because
+    searches went out for "2025 2026", and the working folder because a bare
+    "ls" otherwise runs somewhere the model can only guess at.
+    """
+    home = os.path.expanduser("~")
+    facts = [f"The user's home folder is {home} (so ~/Downloads is {home}/Downloads)."]
+    project = cfg.get("project_dir")
+    if project:
+        # Put as the user thinks of it. "Relative paths work in X" was read as
+        # a technicality: asked to fix the tests "here", the model searched the
+        # whole home folder for files that were in front of it all along.
+        facts.append(f"The folder you are working in is {project}: when the user "
+                     "says \"here\" or names a file without a folder, it is there. "
+                     "Refer to files in it by name — paths are relative to it, and "
+                     "shell commands already run in it.")
+    else:
+        facts.append("No project folder is set, so use full paths starting with ~ or /.")
+    # The model knows Linux: it tried `ps --sort` six ways on a Mac.
+    facts.append("This is macOS, so shell tools are the BSD versions — GNU-only "
+                 "options such as `ps --sort` do not exist here.")
+    # A Mac has python3 and no `python`, and every coding task opened with a
+    # "command not found" and a second try.
+    if not shutil.which("python") and shutil.which("python3"):
+        facts.append("Run Python as python3; there is no `python` command here.")
+    today = datetime.date.today()
+    facts.append(f"Today is {today:%A} {today.day} {today:%B %Y}.")
+    return f"{str(cfg.get('system_prompt') or '').rstrip()}\n\n{' '.join(facts)}"
 
 
 # --------------------------------------------------------------------------
@@ -406,9 +551,24 @@ def parse_xml_tool_calls(content):
     answer, and stops one step short.
     """
     calls = []
-    for block in re.findall(r"<tool_call>(.*?)</tool_call>", content, re.DOTALL):
+    # Also recover a call whose closing </tool_call> was omitted after </function>,
+    # or a JSON object inside <tool_call>...</tool_call>, while still ignoring a
+    # truncated call that never reached </function> or }.
+    pattern = r"<tool_call>(.*?)(?:</tool_call>|(?<=</function>)\s*$)"
+    for block in re.findall(pattern, content, re.DOTALL):
         name = re.search(r"<function=([\w.-]+)>", block)
         if not name:
+            try:
+                parsed = json.loads(block.strip())
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, dict) and parsed.get("name"):
+                raw_args = parsed.get("arguments", {})
+                if not isinstance(raw_args, str):
+                    raw_args = json.dumps(raw_args if isinstance(raw_args, dict) else {})
+                calls.append({"id": f"xml_{len(calls)}", "type": "function",
+                              "function": {"name": str(parsed["name"]),
+                                           "arguments": raw_args}})
             continue
         func_name = name.group(1)
         args = {}
@@ -448,26 +608,135 @@ def clean_argument(value):
     return value.strip()
 
 
+def _parsed_arguments(call):
+    """A call's arguments as the model sent them: a dict, or why they are not one."""
+    raw = (call.get("function") or {}).get("arguments")
+    if isinstance(raw, dict):            # some servers send them already parsed
+        return raw, ""
+    try:
+        args = json.loads(raw or "{}")
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {}, f"they are not valid JSON ({getattr(exc, 'msg', exc)})"
+    if not isinstance(args, dict):
+        return {}, "they are not a JSON object of named arguments"
+    return args, ""
+
+
 def call_arguments(call):
     """The arguments of one tool call, parsed and cleaned of XML bleed."""
-    try:
-        args = json.loads(call["function"]["arguments"] or "{}")
-    except json.JSONDecodeError:
-        return {}
+    args, _ = _parsed_arguments(call)
     return {k: clean_argument(v) for k, v in args.items()}
+
+
+def argument_problem(call):
+    """
+    Why a call cannot be run as asked, or "" if it can.
+
+    Unparseable arguments used to become no arguments at all, so the tool ran
+    with nothing — read_file of "", a command of "" — and the model was told
+    the file did not exist rather than that it had written the call wrong.
+    """
+    _, problem = _parsed_arguments(call)
+    if not problem:
+        return ""
+    name = (call.get("function") or {}).get("name") or "the tool"
+    return (f"Error: the call to {name} was not run because its arguments could "
+            f"not be read: {problem}. Call it again with a JSON object.")
 
 
 # --------------------------------------------------------------------------
 # One completion
 # --------------------------------------------------------------------------
 
+class Completion:
+    """What one request to the model came back with."""
+
+    def __init__(self):
+        self.text = ""        # the answer, as the user sees it
+        self.reasoning = ""   # the thinking that led to it, when that is on
+        self.calls = []       # the tools it asked for
+        self.tokens = 0       # what it cost, when the server says
+        self.finish = ""      # why the server stopped: stop, length, tool_calls
+        self.error = ""       # why it failed, when it did — for the user to read
+
+
+class Forward:
+    """
+    Passes a growing piece of text to the sink, and stops where a tool call
+    starts.
+
+    Holds back the last few characters while they could still be the start of
+    the tag, so a raw "<tool" never reaches the screen. It used to: and when
+    the tag completed, the whole answer so far was sent a second time, so
+    every "Let me check." before a tool call came out twice.
+    """
+
+    def __init__(self, emit, batch=1):
+        self.emit = emit
+        self.batch = batch
+        self.text = ""
+        self.shown = 0
+        self.stopped = False
+
+    def add(self, piece):
+        self.text += piece
+        if self.stopped:
+            return
+        cut = self.text.find(TAG, self.shown)
+        if cut != -1:
+            self._flush(cut, trim=True)
+            self.stopped = True
+            return
+        safe = len(self.text)
+        for size in range(min(len(TAG) - 1, len(self.text)), 0, -1):
+            if TAG.startswith(self.text[-size:]):
+                safe -= size
+                break
+        # Trailing space waits for the next word, so the blank lines a model
+        # puts before a tool call never reach the screen.
+        while safe > self.shown and self.text[safe - 1].isspace():
+            safe -= 1
+        if safe - self.shown >= self.batch:
+            self._flush(safe)
+
+    def close(self):
+        if not self.stopped:
+            self._flush(len(self.text))
+
+    def _flush(self, upto, trim=False):
+        if upto > self.shown:
+            piece = self.text[self.shown:upto]
+            piece = piece.rstrip() if trim else piece
+            if piece:
+                self.emit(piece)
+            self.shown = upto
+
+
+def server_message(error):
+    """The reason llama-server gave for refusing a request, from its error body."""
+    try:
+        body = json.loads(error.read() or b"{}")
+        detail = body.get("error", body)
+        message = detail.get("message") if isinstance(detail, dict) else detail
+        if message:
+            return str(message)
+    except (OSError, ValueError, AttributeError):
+        pass
+    return str(error)
+
+
 def stream(messages, cfg, sink, use_tools=True):
     """
     Stream one completion, reporting to `sink` as it arrives.
 
-    Returns (text, tool_calls, tokens). Streaming is the whole point: the model
-    generates around 30 tokens/sec, so a 400-token answer takes ~13s. Held back
-    until complete that reads as a hang; streamed it reads as fast typing.
+    Returns a Completion. Streaming is the whole point: the model generates
+    around 30 tokens/sec, so a 400-token answer takes ~13s. Held back until
+    complete that reads as a hang; streamed it reads as fast typing.
+
+    Nothing that goes wrong here is swallowed any more. A dropped connection,
+    a timeout, or the server refusing the request all used to end with an
+    empty reply and no word of why, which is indistinguishable from the model
+    simply stopping — the exact symptom that made Harness look unreliable.
     """
     thinking = bool(cfg.get("thinking"))
     payload = {
@@ -487,30 +756,38 @@ def stream(messages, cfg, sink, use_tools=True):
     request = urllib.request.Request(
         SERVER, data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"})
+    reply = Completion()
 
     try:
         response = urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT)
-    except urllib.error.URLError as exc:
-        sink.error(f"Cannot reach the model server at {SERVER}: {exc}. "
-                   "Start it with: harness model")
-        return "", [], 0
+    except urllib.error.HTTPError as exc:
+        # Reaching the server and being refused by it are different failures,
+        # and the refusal says why — usually that the conversation no longer
+        # fits the context window. It used to be reported as "cannot reach".
+        with exc:
+            reply.error = f"The model server refused the request: {server_message(exc)}"
+        return reply
+    except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+        reason = getattr(exc, "reason", exc)
+        reply.error = (f"Cannot reach the model server at {SERVER}: {reason}. "
+                       "Start it with: harness model")
+        return reply
 
     if hasattr(sink, "active_response"):
         sink.active_response = response
 
     calls = {}       # index -> partial tool call, assembled across deltas
-    full = ""        # everything the model has said this completion
-    shown = 0        # how much of it has reached the sink
     building = 0     # bytes of tool-call payload, for the progress report
-    quiet = False    # a tool call has started; stop forwarding prose
-    used = 0         # tokens this completion cost, if the server says
+    ended = False    # the server said it had finished, rather than just going quiet
+    answer = Forward(sink.token, batch=4)
+    thought = Forward(sink.reasoning)
 
     # Fraction of max_tokens spent so far. The server only reports usage at the
     # end, so estimate from characters — roughly 3.6 per token — which is
     # accurate enough to warn before a long tool call is cut off mid-string.
     cap = max(1, int(cfg["max_tokens"]))
     def spent():
-        return min(1.0, (len(full) + building) / 3.6 / cap)
+        return min(1.0, (len(answer.text) + len(thought.text) + building) / 3.6 / cap)
 
     try:
         with response:
@@ -529,129 +806,304 @@ def stream(messages, cfg, sink, use_tools=True):
                     continue
                 body = line[6:]
                 if body == "[DONE]":
+                    ended = True
                     break
                 try:
                     chunk = json.loads(body)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(chunk, dict):
+                    continue
+                # A failure partway through arrives as a chunk of its own, with
+                # no choices — it used to be skipped like a usage chunk.
+                if chunk.get("error"):
+                    detail = chunk["error"]
+                    message = (detail.get("message") if isinstance(detail, dict)
+                               else detail) or "unknown error"
+                    reply.error = f"The model server stopped partway: {message}"
+                    break
                 # The usage chunk carries no choices, so read it before indexing.
                 # Count generated tokens, not the total: a cached prompt costs no
                 # wall-clock, so including it reported things like 4460 tok/s.
                 if chunk.get("usage"):
                     usage = chunk["usage"]
-                    used = (usage.get("completion_tokens")
-                            or usage.get("total_tokens") or used)
-                try:
-                    delta = chunk["choices"][0].get("delta", {})
-                except (IndexError, KeyError, TypeError):
+                    reply.tokens = (usage.get("completion_tokens")
+                                    or usage.get("total_tokens") or reply.tokens)
+                choices = chunk.get("choices") or []
+                if not choices or not isinstance(choices[0], dict):
                     continue
+                choice = choices[0]
+                reply.finish = choice.get("finish_reason") or reply.finish
+                delta = choice.get("delta") or {}
 
                 # Reasoning tokens arrive either in `reasoning_content` (DeepSeek)
                 # or enclosed in <think> tags. Forward them so the user sees progress.
                 reasoning = delta.get("reasoning_content") or delta.get("reasoning")
                 if reasoning:
-                    sink.reasoning(reasoning)
+                    thought.add(reasoning)
 
                 content = delta.get("content") or ""
                 if content:
-                    full += content
-                    if TAG in full and not quiet:
-                        quiet = True
-                        sink.token(full[:full.find(TAG)].strip())
-                    elif not quiet and len(full) - shown >= 4:
-                        sink.token(full[shown:])
-                        shown = len(full)
+                    answer.add(content)
 
                 for call in delta.get("tool_calls") or []:
                     idx = call.get("index", 0)
                     if idx not in calls:
                         calls[idx] = {"id": call.get("id", ""), "type": "function",
                                       "function": {"name": "", "arguments": ""}}
-                    function = call.get("function", {})
+                    function = call.get("function") or {}
                     if function.get("name"):
                         calls[idx]["function"]["name"] += function["name"]
                     if function.get("arguments"):
                         calls[idx]["function"]["arguments"] += function["arguments"]
                         building += len(function["arguments"])
                         sink.building(building, spent())
-    except (OSError, urllib.error.URLError, http.client.HTTPException):
-        pass
+    except (OSError, urllib.error.URLError, http.client.HTTPException) as exc:
+        # Stop closes the socket on purpose, and that lands here too.
+        if not sink.cancelled():
+            reply.error = ("The connection to the model server dropped partway "
+                           f"through the reply ({getattr(exc, 'reason', exc)}).")
     finally:
         if hasattr(sink, "active_response"):
             sink.active_response = None
 
-    if not quiet and len(full) > shown:
-        sink.token(full[shown:])
+    # A connection that dies partway through a streamed reply does not raise:
+    # reading it just stops, exactly as if the reply were over. llama-server
+    # ends every reply it finishes with a reason and [DONE], so one that has
+    # neither was cut off — a crash, or the Mac running out of memory.
+    if not (ended or reply.finish or reply.error or sink.cancelled()):
+        reply.error = ("The model server stopped partway through the reply without "
+                       "finishing it. It may have crashed or run out of memory — "
+                       "see Settings → System & Controls → Model log.")
 
-    text = full.strip()
-    parsed = [calls[k] for k in sorted(calls)]
+    answer.close()
+    thought.close()
+
+    reply.text = answer.text.strip()
+    reply.calls = [calls[k] for k in sorted(calls)]
     # Recover calls the server emitted as plain XML rather than parsing.
-    if not parsed and TAG in text:
-        parsed = parse_xml_tool_calls(text)
-    return text, parsed, used
+    if not reply.calls and TAG in reply.text:
+        reply.calls = parse_xml_tool_calls(reply.text)
+    # And calls written inside the thinking, by a model that never closed it.
+    # The server files all of that as reasoning, so the step looked empty and
+    # the turn ended — though the call was there, correct, every time. Only
+    # when there is no answer: a call the model thought about and then chose
+    # not to make is not one to run.
+    reasoning = thought.text
+    if not reply.calls and not reply.text and TAG in reasoning:
+        reply.calls = parse_xml_tool_calls(reasoning)
+    if TAG in reasoning:
+        reasoning = reasoning[:reasoning.find(TAG)]
+    reply.reasoning = reasoning.strip()
+    return reply
+
+
+# What the user is told when the model gives nothing back, even when asked again.
+EMPTY_REPLY = ("The model stopped without answering or using a tool, twice in a "
+               "row, so the turn ends here. Send the message again, or say "
+               "\"continue\".")
+
+
+def complete(messages, cfg, sink, use_tools=True):
+    """
+    One step's reply, asked for a second time if it comes back with nothing.
+
+    An empty reply — no answer and no tool call — is never what was meant.
+    It is what this model produces when its thinking goes wrong, so the second
+    attempt goes without thinking: asked that way, the same steps came back as
+    proper tool calls every time.
+    """
+    reply = stream(messages, cfg, sink, use_tools)
+    if reply.error or reply.text or reply.calls or sink.cancelled():
+        return reply
+    again = stream(messages, dict(cfg, thinking=False), sink, use_tools)
+    again.tokens += reply.tokens
+    return again
+
+
+def assistant_message(reply, calls=None):
+    """A reply as it goes into the history — with its thinking, when it had any."""
+    message = {"role": "assistant", "content": "" if calls else reply.text}
+    if calls:
+        message["tool_calls"] = calls
+    if reply.reasoning:
+        message["reasoning_content"] = reply.reasoning
+    return message
+
+
+# Tools whose result can change what other tools see. After one runs, a repeat
+# of anything earlier is a fresh look, not the model going round in circles.
+CHANGES_THINGS = {"write_file", "edit_file", "run_command"}
+
+# How many pictures one turn may look at. Asked to email the newest version of
+# each photo in a folder, the model looked at twelve full-size images — some
+# twice, some that did not exist — to tell versions apart that their names
+# already told apart. Each costs ~1,000-1,400 tokens of context and seconds of
+# encoding, and twelve pushed the turn past its budget.
+PICTURES_PER_TURN = 6
+
+# How many times the user can decline the same tool in one turn before the loop
+# refuses further attempts automatically. A 9B model ignored the refusal wording
+# and kept tweaking denied commands six to eleven times in a row.
+DENIALS_PER_TOOL = 2
 
 
 # --------------------------------------------------------------------------
 # The loop
 # --------------------------------------------------------------------------
 
-def run(history, user_input, cfg, sink):
+def run(history, user_input, cfg, sink, images=None):
     """Run one exchange to completion, extending `history` in place."""
-    history.append({"role": "user", "content": user_input})
-    system = {"role": "system", "content": cfg["system_prompt"]}
+    user_message = {"role": "user", "content": user_input}
+    if images:
+        user_message["images"] = list(images)
+    history.append(user_message)
+    asked = len(history) - 1          # where this exchange starts
+    system = {"role": "system", "content": system_prompt(cfg)}
     # Sized to the window the server really has. A fixed 24K-character budget
     # written for a 16K window kept trimming a 32K one at half its capacity,
     # and every trim cost a full re-read of the prompt (see trim_history).
-    budget = history_budget(cfg, context_window())
+    props = server_props()
+    budget = history_budget(cfg, props["n_ctx"])
+    # A model with no vision projector is not offered a tool it cannot use:
+    # the server refuses a request with an image in it outright.
+    if not props["vision"]:
+        cfg = dict(cfg, tools={**cfg.get("tools", {}), "view_image": False})
 
     seen = {}
+    denials = {}
     repeats = 0
     started = time.monotonic()
     tokens = 0
     steps = 0
+    max_steps = max(1, int(cfg["max_steps"]))
 
     def done():
         sink.stats(round(time.monotonic() - started, 1), tokens, steps)
 
-    for _ in range(max(1, int(cfg["max_steps"]))):
+    def ask(extra=(), use_tools=True):
+        nonlocal tokens, budget
+        # Re-trimmed every step, not just at the start. The budget was applied
+        # once to the conversation and then several thousand characters of
+        # tool output were appended to it, which is how a turn that read two
+        # large files pushed the system prompt out of a 16K window mid-turn.
+        # Always from the whole history: trimming an already-trimmed list put
+        # its cut points somewhere else, and moved the opening between turns.
+        # The extra goes on after trimming, not before. The nudge that ends a
+        # stuck turn is a user message, and trimmed along with the rest it
+        # counted as the start of a new exchange: a turn that had outgrown the
+        # budget was cut back to the nudge alone, and the model, asked to
+        # "answer my original question" with no question in front of it,
+        # recited its own system prompt.
+        trimmed = trim_history(for_model(history), budget)
+        messages = [system] + trimmed + list(extra)
+        reply = complete(messages, cfg, sink, use_tools)
+        tokens += reply.tokens
+        # CHARS_PER_TOKEN is an estimate, and dense JSON/paths can overshoot
+        # n_ctx slightly. Trim tighter once if doing so actually drops steps.
+        if (reply.error and "context" in reply.error.lower()
+                and "refused" in reply.error.lower()):
+            smaller = max(2000, min(budget // 2, sum(_size(m) for m in trimmed) // 2))
+            tighter = trim_history(for_model(history), smaller)
+            if len(tighter) < len(trimmed):
+                budget = smaller
+                messages = [system] + tighter + list(extra)
+                reply = complete(messages, cfg, sink, use_tools)
+                tokens += reply.tokens
+        return reply
+
+    def answered(reply):
+        """Record a final reply, or say plainly why there is none."""
+        if reply.error:
+            sink.error(reply.error)
+        elif reply.finish == "length":
+            sink.error(f"The reply was cut off at its length limit ({cfg['max_tokens']} "
+                       "tokens). Raise Max reply in Settings → Model & Behavior, "
+                       "or ask for something shorter.")
+        if reply.text or reply.reasoning:
+            history.append(assistant_message(reply))
+        elif not reply.error and not sink.cancelled():
+            sink.error(EMPTY_REPLY)
+
+    for _ in range(max_steps):
         if sink.cancelled():
             return done()
         steps += 1
-        # Re-trimmed every step, not just at the start. The budget was applied
-        # once to the conversation and then several thousand characters of tool
-        # output were appended to it, which is how a turn that read two large
-        # files pushed the system prompt out of a 16K window mid-turn. Always
-        # from the whole history: trimming an already-trimmed list put its cut
-        # points somewhere else, and moved the opening between turns.
-        text, calls, used = stream([system] + trim_history(history, budget),
-                                   cfg, sink)
-        tokens += used
-        if sink.cancelled() or not calls:
-            history.append({"role": "assistant", "content": text})
+        reply = ask()
+        if reply.error or sink.cancelled() or not reply.calls:
+            answered(reply)
             return done()
 
-        history.append({"role": "assistant", "content": "", "tool_calls": calls})
+        history.append(assistant_message(reply, reply.calls))
 
-        for call in calls:
-            name = call["function"]["name"]
+        step_repeated = False
+        for index, call in enumerate(reply.calls):
+            name = (call.get("function") or {}).get("name", "")
             args = call_arguments(call)
             sink.tool_start(name, args)
+
+            problem = argument_problem(call)
+            if problem and reply.finish == "length" and index == len(reply.calls) - 1:
+                # Not a malformed call: the reply ran out of room while writing it.
+                problem = (f"Error: the call to {name} was cut off at the reply "
+                           f"length limit (max_tokens {cfg['max_tokens']}) and was "
+                           "not run. Do it in smaller pieces — for a long file, "
+                           "write part of it and add the rest with edit_file.")
+                sink.error(f"A {name} call was cut off at the reply length limit "
+                           f"({cfg['max_tokens']} tokens), so it was not run.")
 
             # Running the same call twice means the model is stuck. Replaying
             # the first result with a nudge ends the turn instead of looping.
             signature = (name, json.dumps(args, sort_keys=True))
-            if signature in seen:
-                repeats += 1
-                result = (f"{seen[signature]}\n\n[You already ran this and this "
-                          "was the result. Answer the user now. Do not call any "
-                          "more tools.]")
+            pictures = sum(1 for m in history[asked:] if m.get("image"))
+            if problem:
+                result = problem
+            elif denials.get(name, 0) >= DENIALS_PER_TOOL:
+                step_repeated = True
+                result = (f"Error: the user already declined {name} "
+                          f"{denials[name]} times this turn, so it will not be "
+                          "asked again. Work with what you have or ask the user "
+                          "in plain text.")
+            elif name == "view_image" and pictures >= PICTURES_PER_TURN and signature not in seen:
+                result = (f"Error: {PICTURES_PER_TURN} pictures have been shown this "
+                          "turn, which is as many as one turn can hold. Work from what "
+                          "you have seen, or ask the user which pictures matter.")
+            elif signature in seen:
+                step_repeated = True
+                result = (f"{seen[signature]}\n\n[You already ran this and got "
+                          "the result above. Do not call it again with the same "
+                          "arguments — move on to the next step or answer the user.]")
             else:
-                result = seen[signature] = tools.call(name, args, cfg, sink)
+                result = tools.call(name, args, cfg, sink)
+                if str(result).startswith("Error: the user declined"):
+                    denials[name] = denials.get(name, 0) + 1
+                # Once something actually changed, an earlier look is out of
+                # date: run the tests, edit, run them again. A failed or
+                # refused command changed nothing — clearing `seen` then let
+                # the model re-fetch the same URL four times after denied curls.
+                elif name in CHANGES_THINGS and not str(result).startswith("Error:"):
+                    seen.clear()
+                seen[signature] = result
 
-            sink.tool_result(name, result)
-            history.append({"role": "tool", "tool_call_id": call.get("id", ""),
-                            "content": result})
+            # Give the model a heads-up right before max_steps runs out so it
+            # finishes any required write_file/edit_file before tools turn off.
+            if (max_steps >= 4 and steps == max_steps - 2
+                    and index == len(reply.calls) - 1):
+                result_text = (f"{result}\n\n[Note: 2 tool steps remaining in "
+                               "this turn — finish any needed writes now and "
+                               "give your final answer.]")
+            else:
+                result_text = str(result)
 
+            sink.tool_result(name, result_text)
+            message = {"role": "tool", "tool_call_id": call.get("id", ""),
+                       "content": result_text}
+            if getattr(result, "image", ""):
+                message["image"] = result.image
+            history.append(message)
+
+        if step_repeated:
+            repeats += 1
         if repeats >= 2:
             break
 
@@ -665,11 +1117,7 @@ def run(history, user_input, cfg, sink):
     # Sent, not kept: the nudge is the loop talking, not the user.
     nudge = {"role": "user", "content":
              "Answer my original question now, using what you found above."}
-    text, _, used = stream([system] + trim_history(history + [nudge], budget),
-                           cfg, sink, use_tools=False)
-    tokens += used
-    if text:
-        history.append({"role": "assistant", "content": text})
+    answered(ask([nudge], use_tools=False))
     done()
 
 

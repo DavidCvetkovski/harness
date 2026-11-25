@@ -8,9 +8,11 @@ All of it is safe to edit by hand.
 import contextlib
 import datetime
 import json
+import math
 import os
 import secrets
 import subprocess
+import tempfile
 import threading
 
 BASE = os.path.expanduser("~/.harness")
@@ -20,9 +22,12 @@ TOKEN_FILE = os.path.join(BASE, "access-token")
 MODEL_CHOICE_FILE = os.path.join(BASE, "model")
 MODELS_DIR = os.path.expanduser("~/llm/models")
 SESSION_DIR = os.path.join(BASE, "sessions")
+UPLOAD_DIR = os.path.join(BASE, "uploads")
+CERTS_DIR = os.path.join(BASE, "certs")
 
-TOOL_NAMES = ("list_files", "read_file", "write_file", "edit_file",
-              "web_search", "fetch_url", "run_command")
+TOOL_NAMES = ("list_files", "find_files", "search_in_files", "read_file",
+              "write_file", "edit_file", "web_search", "fetch_url",
+              "run_command", "system_status", "send_email", "view_image")
 
 # The wording matters more than it looks. An earlier version said "use tools to
 # find real answers instead of guessing", which pushed the model to run
@@ -63,7 +68,7 @@ DEFAULTS = {
 
 # Named starting points, so the common cases don't require understanding
 # sampling parameters. Each lists only what it changes from DEFAULTS, plus
-# `off` for the tools it withholds — spelling out all seven every time let
+# `off` for the tools it withholds — spelling out every one every time let
 # them drift apart as tools were added.
 PRESETS = {
     "balanced": {
@@ -74,13 +79,14 @@ PRESETS = {
         "label": "Read only",
         "blurb": "Can look at things and search the web, but cannot change anything.",
         "temperature": 0.5, "top_p": 0.9, "max_tokens": 1000, "max_steps": 6,
-        "off": ["write_file", "edit_file"],
+        "off": ["write_file", "edit_file", "send_email"],
     },
     "quick": {
         "label": "Quick answers",
         "blurb": "Short replies, no web, no file changes. Fastest option.",
         "max_tokens": 600, "max_steps": 4,
-        "off": ["write_file", "edit_file", "web_search", "fetch_url"],
+        "off": ["write_file", "edit_file", "web_search", "fetch_url", "send_email",
+                "view_image"],
     },
     "thorough": {
         "label": "Thorough",
@@ -114,24 +120,59 @@ def _read(path, fallback):
 
 
 def _write(path, payload):
-    """Write via a temp file so an interrupted save can't truncate the real one."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    temporary = path + ".tmp"
-    with open(temporary, "w") as handle:
-        json.dump(payload, handle, indent=1)
-    os.replace(temporary, path)
+    """
+    Write via a temp file so an interrupted save can't truncate the real one.
+
+    A temp file of its own, not one shared name per file: two saves of the
+    same file at once each opened `path.tmp`, and one renamed the other's
+    half-written copy into place.
+    """
+    folder = os.path.dirname(path)
+    os.makedirs(folder, exist_ok=True)
+    handle, temporary = tempfile.mkstemp(dir=folder, prefix=".save-", suffix=".tmp")
+    try:
+        with os.fdopen(handle, "w") as out:
+            json.dump(payload, out, indent=1)
+        os.replace(temporary, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(temporary)
+        raise
 
 
 # --------------------------------------------------------------------------
 # Settings
 # --------------------------------------------------------------------------
 
+# The numbers every request is built from, and the range each has to be in.
+# Anything else — a blank field saved as null, a hand-edited "1200" — fell
+# straight through to the request, and a max_tokens of null took every chat
+# down with a TypeError before the model was even asked.
+NUMBERS = {"temperature": (0.0, 2.0, float), "top_p": (0.0, 1.0, float),
+           "top_k": (0, 1000, int), "max_tokens": (16, 131072, int),
+           "max_steps": (1, 200, int)}
+
+
+def _number(value, default, low, high, kind):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if isinstance(value, bool) or not math.isfinite(number):
+        return default
+    return kind(min(high, max(low, number)))
+
+
 def load_config():
     stored = _read(CONFIG_FILE, {})
+    stored = stored if isinstance(stored, dict) else {}
     merged = dict(DEFAULTS)
     merged.update({k: v for k, v in stored.items() if k in DEFAULTS})
     # Tools gain entries as the agent grows; fill in any the file predates.
-    merged["tools"] = {**DEFAULTS["tools"], **stored.get("tools", {})}
+    tools = stored.get("tools")
+    merged["tools"] = {**DEFAULTS["tools"], **(tools if isinstance(tools, dict) else {})}
+    for key, (low, high, kind) in NUMBERS.items():
+        merged[key] = _number(merged[key], DEFAULTS[key], low, high, kind)
     return merged
 
 
@@ -140,7 +181,8 @@ def save_config(patch):
         current = load_config()
         current.update({k: v for k, v in patch.items() if k in DEFAULTS})
         _write(CONFIG_FILE, current)
-        return current
+        # Read back, so what the page is shown is what a request will use.
+        return load_config()
 
 
 def reset_config():
@@ -440,7 +482,12 @@ def is_due(entry, now=None):
         last = None
 
     if kind == "interval":
-        minutes = max(1, int(schedule.get("minutes", 60)))
+        # A bad value here raised out of is_due, and the scheduler, which runs
+        # every automation in one loop, skipped all the rest along with it.
+        try:
+            minutes = max(1, int(schedule.get("minutes", 60)))
+        except (TypeError, ValueError):
+            return False
         return last is None or (now - last).total_seconds() >= minutes * 60
 
     if kind == "daily":
@@ -448,7 +495,7 @@ def is_due(entry, now=None):
             clock = str(schedule.get("time", "09:00")).split(":")
             hour, minute = (int(part) for part in clock)
             target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        except ValueError:
+        except (TypeError, ValueError):
             return False
         # Fire once per day: skip if the last run was already past today's time.
         return now >= target and (last is None or last < target)
