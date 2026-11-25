@@ -4,7 +4,7 @@ options:
   deploymentTarget:
     macOS: "14.0"
   xcodeVersion: "16.0"
-  createIntermediateGroups: true
+  createIntermediateGroups: false
 settings:
   base:
     SWIFT_VERSION: "5.0"

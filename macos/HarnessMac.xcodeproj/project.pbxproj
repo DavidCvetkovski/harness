@@ -7,27 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		060D58B9F2B3A3857E76FF1F /* SSEParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4DF22009026D561A6F750D0 /* SSEParser.swift */; };
 		1BC1F8444B699D3864D1CB0D /* ProseBlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1404165C6C0D1D5A0CCCCEA /* ProseBlocksView.swift */; };
-		297ADC9DBD630A6CFAFDF7F8 /* HarnessTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D88A07ED7499C20702F243 /* HarnessTheme.swift */; };
 		59EF89937880960CCD82496A /* MacUIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3672ACDDB973AE400466D714 /* MacUIState.swift */; };
 		65C855629697F9553F5F4612 /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56FF62430E88D5295CA9A56 /* MacSettingsView.swift */; };
-		73A4B52ACE4E6AFC037E13D1 /* SessionDates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05A4D8CFF3F53615181D6BB /* SessionDates.swift */; };
-		74E5D3EC6885A0C04F1F2929 /* PlatformSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8ACD8F729317211AB8221B /* PlatformSupport.swift */; };
+		6F1F35F5CF3F7E43C880108A /* DemoHarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14FD7EE97223D08F5888ED5E /* DemoHarnessClient.swift */; };
+		7DBC8DA941E97BE440C44D94 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 639D900AF4CB253388C139B1 /* KeychainStore.swift */; };
 		8813BDFE0BC1901BD4293B8B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2EE21FD7F26504E01BEACE87 /* Assets.xcassets */; };
-		8CAADF381E7BA10AE7979100 /* DemoHarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DD686F86E8E4E90D1EEF16B /* DemoHarnessClient.swift */; };
-		91221DBAF9BE0CE740BDD533 /* HarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D198CF7986CF90AC7AA7FB8 /* HarnessClient.swift */; };
+		8F65E7AA36E2B11D1125CB3C /* HarnessTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA352B6EF06A6D944F24682E /* HarnessTheme.swift */; };
+		9A32159042E7745CF9850FC6 /* HarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48B72541EF766AA7D6B39751 /* HarnessClient.swift */; };
 		9C56C56DD159B105F3CEC8DB /* StepsGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38150D10E5DFDBB214E505AC /* StepsGroupView.swift */; };
-		A04E081E3B40893290A53627 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDB1586B1AA3FA650038DE5 /* APIModels.swift */; };
+		A37E8D144D33411A461275EE /* SessionDates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AD685C53195D4BEEEE74615 /* SessionDates.swift */; };
 		A41F276BFA81348CC4AAAEF8 /* MacAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096AAB1E9598D28AA27C4D4E /* MacAppTests.swift */; };
 		AB5C883F6BB5709A9C0EF635 /* MacWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C718E2DF53A276A8949C3ECC /* MacWorkspaceView.swift */; };
-		B3612E70A83A2A1682CD4534 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B09AF3DAB5698B99A92EC55 /* KeychainStore.swift */; };
+		B0F4DFC62100D31FBB7EEF45 /* PlatformSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31E80C2FF2197D254C80A968 /* PlatformSupport.swift */; };
 		BFAC028FF6B74A3C9AFE26A0 /* BackendSupervisor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 047B8B2C8864095EB8DAEAEB /* BackendSupervisor.swift */; };
 		CCD5CF7294C37D896736F596 /* MessageRowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD3B9CDFB73F15A7D7D0785 /* MessageRowViews.swift */; };
 		D7AA932207BDD179C48E4E61 /* QRCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EC4D3703BC0A33D9F6D8065 /* QRCodeView.swift */; };
+		E353E735B4E18BC4D076F19B /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF72F84EC74911D86B8D0216 /* APIModels.swift */; };
 		EC671A4E1E3EE51865349301 /* MacNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B25490208F882AFF67D4E19 /* MacNotifications.swift */; };
 		EDC140321CD699589D50B913 /* HarnessMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B481E633F74FD14A58654071 /* HarnessMacApp.swift */; };
-		F2E5667610312E7F20B6DEBC /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5B1B8FC3782D11FD6588B2 /* AppStore.swift */; };
+		F905B521EDC53CCB83519B14 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04E01B3A43ED6534ECF34CEB /* AppStore.swift */; };
+		FB43BA6AC1036D31A382AB83 /* SSEParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BBD0CF8271B40AAF1EBD734 /* SSEParser.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,72 +42,66 @@
 
 /* Begin PBXFileReference section */
 		047B8B2C8864095EB8DAEAEB /* BackendSupervisor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendSupervisor.swift; sourceTree = "<group>"; };
+		04E01B3A43ED6534ECF34CEB /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 		096AAB1E9598D28AA27C4D4E /* MacAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAppTests.swift; sourceTree = "<group>"; };
-		0A8ACD8F729317211AB8221B /* PlatformSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformSupport.swift; sourceTree = "<group>"; };
-		1FDB1586B1AA3FA650038DE5 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		0BBD0CF8271B40AAF1EBD734 /* SSEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParser.swift; sourceTree = "<group>"; };
+		14FD7EE97223D08F5888ED5E /* DemoHarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarnessClient.swift; sourceTree = "<group>"; };
 		221EA280CBE6922DB42120A4 /* HarnessMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarnessMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2EE21FD7F26504E01BEACE87 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		31E80C2FF2197D254C80A968 /* PlatformSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformSupport.swift; sourceTree = "<group>"; };
 		3672ACDDB973AE400466D714 /* MacUIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacUIState.swift; sourceTree = "<group>"; };
 		38150D10E5DFDBB214E505AC /* StepsGroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StepsGroupView.swift; path = ../ios/Harness/Views/StepsGroupView.swift; sourceTree = "<group>"; };
+		48B72541EF766AA7D6B39751 /* HarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessClient.swift; sourceTree = "<group>"; };
+		4AD685C53195D4BEEEE74615 /* SessionDates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDates.swift; sourceTree = "<group>"; };
 		4B25490208F882AFF67D4E19 /* MacNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNotifications.swift; sourceTree = "<group>"; };
-		4DD686F86E8E4E90D1EEF16B /* DemoHarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarnessClient.swift; sourceTree = "<group>"; };
 		5C465016FC0D35727CE2D591 /* HarnessMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HarnessMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		5E5B1B8FC3782D11FD6588B2 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
-		6D198CF7986CF90AC7AA7FB8 /* HarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessClient.swift; sourceTree = "<group>"; };
+		639D900AF4CB253388C139B1 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
 		8EC4D3703BC0A33D9F6D8065 /* QRCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRCodeView.swift; sourceTree = "<group>"; };
 		9185EBF5BE1F51493A59E5C8 /* HarnessMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HarnessMac.entitlements; sourceTree = "<group>"; };
-		9B09AF3DAB5698B99A92EC55 /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
-		A05A4D8CFF3F53615181D6BB /* SessionDates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDates.swift; sourceTree = "<group>"; };
+		AA352B6EF06A6D944F24682E /* HarnessTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessTheme.swift; sourceTree = "<group>"; };
 		B481E633F74FD14A58654071 /* HarnessMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessMacApp.swift; sourceTree = "<group>"; };
 		B8A8F2024E131063DA5C087C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C718E2DF53A276A8949C3ECC /* MacWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacWorkspaceView.swift; sourceTree = "<group>"; };
 		CCD3B9CDFB73F15A7D7D0785 /* MessageRowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MessageRowViews.swift; path = ../ios/Harness/Views/MessageRowViews.swift; sourceTree = "<group>"; };
+		CF72F84EC74911D86B8D0216 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
 		D1404165C6C0D1D5A0CCCCEA /* ProseBlocksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ProseBlocksView.swift; path = ../ios/Harness/Views/ProseBlocksView.swift; sourceTree = "<group>"; };
-		D4D88A07ED7499C20702F243 /* HarnessTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessTheme.swift; sourceTree = "<group>"; };
-		D4DF22009026D561A6F750D0 /* SSEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParser.swift; sourceTree = "<group>"; };
 		F56FF62430E88D5295CA9A56 /* MacSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		08C063857114448C0E761F28 /* Models */ = {
+		1C285B8B1E3A5570FB68F329 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
-				1FDB1586B1AA3FA650038DE5 /* APIModels.swift */,
-				A05A4D8CFF3F53615181D6BB /* SessionDates.swift */,
+				14FD7EE97223D08F5888ED5E /* DemoHarnessClient.swift */,
+				48B72541EF766AA7D6B39751 /* HarnessClient.swift */,
+				639D900AF4CB253388C139B1 /* KeychainStore.swift */,
+				0BBD0CF8271B40AAF1EBD734 /* SSEParser.swift */,
 			);
-			name = Models;
-			path = ../ios/Harness/Models;
+			name = Networking;
+			path = ../ios/Harness/Networking;
 			sourceTree = "<group>";
 		};
 		27A402AC63F9D3E09FBB845C /* State */ = {
 			isa = PBXGroup;
 			children = (
-				3FF16E28CA8F8357B761ECB9 /* State */,
+				DB77878DB7E35CE8CF3EA4CC /* State */,
 			);
 			name = State;
 			sourceTree = "<group>";
 		};
-		3FF16E28CA8F8357B761ECB9 /* State */ = {
+		492405AFBA906F722F7F7878 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				5E5B1B8FC3782D11FD6588B2 /* AppStore.swift */,
+				CF72F84EC74911D86B8D0216 /* APIModels.swift */,
+				4AD685C53195D4BEEEE74615 /* SessionDates.swift */,
 			);
-			name = State;
-			path = ../ios/Harness/State;
-			sourceTree = "<group>";
-		};
-		448EF9692B16DC0F17A412D8 /* ios */ = {
-			isa = PBXGroup;
-			children = (
-				95FB9D52F3F323758F3C70A8 /* Harness */,
-			);
-			path = ios;
+			name = Models;
+			path = ../ios/Harness/Models;
 			sourceTree = "<group>";
 		};
 		4F11F5D1D71B2C950578DDA0 = {
 			isa = PBXGroup;
 			children = (
-				F53D17C918F639D0A73F1868 /* Harness */,
 				704013787C1946EF90ACE67E /* HarnessMac */,
 				FCA7C5F386BAC5B9A9EF9284 /* HarnessMacTests */,
 				BD1DB945D95930C3BE148C31 /* Shared */,
@@ -141,31 +135,10 @@
 			path = HarnessMac;
 			sourceTree = "<group>";
 		};
-		95FB9D52F3F323758F3C70A8 /* Harness */ = {
-			isa = PBXGroup;
-			children = (
-				08C063857114448C0E761F28 /* Models */,
-				C5162DC31305FA165EEEBB48 /* Networking */,
-				3FF16E28CA8F8357B761ECB9 /* State */,
-				96ACCB0C82BBF9B892F36370 /* Theme */,
-			);
-			path = Harness;
-			sourceTree = "<group>";
-		};
-		96ACCB0C82BBF9B892F36370 /* Theme */ = {
-			isa = PBXGroup;
-			children = (
-				D4D88A07ED7499C20702F243 /* HarnessTheme.swift */,
-				0A8ACD8F729317211AB8221B /* PlatformSupport.swift */,
-			);
-			name = Theme;
-			path = ../ios/Harness/Theme;
-			sourceTree = "<group>";
-		};
 		AEB93A363691BC99871883A9 /* Theme */ = {
 			isa = PBXGroup;
 			children = (
-				96ACCB0C82BBF9B892F36370 /* Theme */,
+				E4C89321C36F2FC82CFA74C6 /* Theme */,
 			);
 			name = Theme;
 			sourceTree = "<group>";
@@ -173,7 +146,7 @@
 		AF1BA8FA17226C4794BCD7ED /* Networking */ = {
 			isa = PBXGroup;
 			children = (
-				C5162DC31305FA165EEEBB48 /* Networking */,
+				1C285B8B1E3A5570FB68F329 /* Networking */,
 			);
 			name = Networking;
 			sourceTree = "<group>";
@@ -190,18 +163,6 @@
 			name = Shared;
 			sourceTree = "<group>";
 		};
-		C5162DC31305FA165EEEBB48 /* Networking */ = {
-			isa = PBXGroup;
-			children = (
-				4DD686F86E8E4E90D1EEF16B /* DemoHarnessClient.swift */,
-				6D198CF7986CF90AC7AA7FB8 /* HarnessClient.swift */,
-				9B09AF3DAB5698B99A92EC55 /* KeychainStore.swift */,
-				D4DF22009026D561A6F750D0 /* SSEParser.swift */,
-			);
-			name = Networking;
-			path = ../ios/Harness/Networking;
-			sourceTree = "<group>";
-		};
 		C6E3B7608E589E3BFDE19116 /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -212,19 +173,29 @@
 			name = Views;
 			sourceTree = "<group>";
 		};
-		F53D17C918F639D0A73F1868 /* Harness */ = {
+		DB77878DB7E35CE8CF3EA4CC /* State */ = {
 			isa = PBXGroup;
 			children = (
-				448EF9692B16DC0F17A412D8 /* ios */,
+				04E01B3A43ED6534ECF34CEB /* AppStore.swift */,
 			);
-			name = Harness;
-			path = ..;
+			name = State;
+			path = ../ios/Harness/State;
+			sourceTree = "<group>";
+		};
+		E4C89321C36F2FC82CFA74C6 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				AA352B6EF06A6D944F24682E /* HarnessTheme.swift */,
+				31E80C2FF2197D254C80A968 /* PlatformSupport.swift */,
+			);
+			name = Theme;
+			path = ../ios/Harness/Theme;
 			sourceTree = "<group>";
 		};
 		FB1F9156E15311B63BE79B0D /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				08C063857114448C0E761F28 /* Models */,
+				492405AFBA906F722F7F7878 /* Models */,
 			);
 			name = Models;
 			sourceTree = "<group>";
@@ -326,24 +297,24 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A04E081E3B40893290A53627 /* APIModels.swift in Sources */,
-				F2E5667610312E7F20B6DEBC /* AppStore.swift in Sources */,
+				E353E735B4E18BC4D076F19B /* APIModels.swift in Sources */,
+				F905B521EDC53CCB83519B14 /* AppStore.swift in Sources */,
 				BFAC028FF6B74A3C9AFE26A0 /* BackendSupervisor.swift in Sources */,
-				8CAADF381E7BA10AE7979100 /* DemoHarnessClient.swift in Sources */,
-				91221DBAF9BE0CE740BDD533 /* HarnessClient.swift in Sources */,
+				6F1F35F5CF3F7E43C880108A /* DemoHarnessClient.swift in Sources */,
+				9A32159042E7745CF9850FC6 /* HarnessClient.swift in Sources */,
 				EDC140321CD699589D50B913 /* HarnessMacApp.swift in Sources */,
-				297ADC9DBD630A6CFAFDF7F8 /* HarnessTheme.swift in Sources */,
-				B3612E70A83A2A1682CD4534 /* KeychainStore.swift in Sources */,
+				8F65E7AA36E2B11D1125CB3C /* HarnessTheme.swift in Sources */,
+				7DBC8DA941E97BE440C44D94 /* KeychainStore.swift in Sources */,
 				EC671A4E1E3EE51865349301 /* MacNotifications.swift in Sources */,
 				65C855629697F9553F5F4612 /* MacSettingsView.swift in Sources */,
 				59EF89937880960CCD82496A /* MacUIState.swift in Sources */,
 				AB5C883F6BB5709A9C0EF635 /* MacWorkspaceView.swift in Sources */,
 				CCD5CF7294C37D896736F596 /* MessageRowViews.swift in Sources */,
-				74E5D3EC6885A0C04F1F2929 /* PlatformSupport.swift in Sources */,
+				B0F4DFC62100D31FBB7EEF45 /* PlatformSupport.swift in Sources */,
 				1BC1F8444B699D3864D1CB0D /* ProseBlocksView.swift in Sources */,
 				D7AA932207BDD179C48E4E61 /* QRCodeView.swift in Sources */,
-				060D58B9F2B3A3857E76FF1F /* SSEParser.swift in Sources */,
-				73A4B52ACE4E6AFC037E13D1 /* SessionDates.swift in Sources */,
+				FB43BA6AC1036D31A382AB83 /* SSEParser.swift in Sources */,
+				A37E8D144D33411A461275EE /* SessionDates.swift in Sources */,
 				9C56C56DD159B105F3CEC8DB /* StepsGroupView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
