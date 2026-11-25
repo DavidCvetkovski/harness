@@ -1,0 +1,81 @@
+name: HarnessMac
+options:
+  bundleIdPrefix: com.davidcvetkovski
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    PRODUCT_NAME: Harness
+    GENERATE_INFOPLIST_FILE: false
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    ENABLE_HARDENED_RUNTIME: true
+targets:
+  HarnessMac:
+    type: application
+    platform: macOS
+    sources:
+      - path: HarnessMac
+        excludes:
+          - "**/*.md"
+      - path: ../ios/Harness/Models
+        group: Shared/Models
+      - path: ../ios/Harness/Networking
+        group: Shared/Networking
+      - path: ../ios/Harness/State
+        group: Shared/State
+      - path: ../ios/Harness/Theme
+        group: Shared/Theme
+      - path: ../ios/Harness/Views/ProseBlocksView.swift
+        group: Shared/Views
+      - path: ../ios/Harness/Views/StepsGroupView.swift
+        group: Shared/Views
+      - path: ../ios/Harness/Views/MessageRowViews.swift
+        group: Shared/Views
+    info:
+      path: HarnessMac/Info.plist
+      properties:
+        CFBundleDisplayName: Harness
+        CFBundleName: Harness
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSApplicationCategoryType: public.app-category.productivity
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true
+        NSHumanReadableCopyright: Copyright © 2026 David Cvetkovski. MIT License.
+    settings:
+      base:
+        PRODUCT_NAME: Harness
+        INFOPLIST_FILE: HarnessMac/Info.plist
+        CODE_SIGN_ENTITLEMENTS: HarnessMac/HarnessMac.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.davidcvetkovski.harness.mac
+        CODE_SIGN_STYLE: Automatic
+  HarnessMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: HarnessMacTests
+    dependencies:
+      - target: HarnessMac
+    settings:
+      base:
+        PRODUCT_NAME: HarnessMacTests
+        GENERATE_INFOPLIST_FILE: true
+        PRODUCT_BUNDLE_IDENTIFIER: com.davidcvetkovski.harness.mac.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Harness.app/Contents/MacOS/Harness"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  HarnessMac:
+    build:
+      targets:
+        HarnessMac: all
+        HarnessMacTests: [test]
+    test:
+      targets:
+        - HarnessMacTests

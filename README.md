@@ -155,6 +155,7 @@ harness/
   ui.html            the whole front end, one file
   model.sh           llama.cpp launcher
 ios/                 native SwiftUI iOS companion app + unit tests (zero dependencies)
+macos/               native SwiftUI macOS desktop + menu bar app & DMG packaging scaffold
 voice/               optional voice sidecar — its own process, its own venv
 tests/               the guards, the loop, sessions, scheduling, concurrency
 ```
