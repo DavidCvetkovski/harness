@@ -141,5 +141,64 @@ class Levelling(unittest.TestCase):
         self.assertEqual(float(abs(voice.normalise(silence)).max()), 0.0)
 
 
+
+class OtherWebsites(unittest.TestCase):
+    """
+    Your voice, and the recording it was made from, are not for any page you
+    happen to visit. The sidecar used to answer every website with
+    Access-Control-Allow-Origin: *.
+    """
+
+    def setUp(self):
+        import tempfile
+        import threading
+        from http.server import ThreadingHTTPServer
+        self.tmp = tempfile.mkdtemp()
+        self.saved = voice.STATE, voice.INDEX_FILE
+        voice.STATE = self.tmp
+        voice.INDEX_FILE = os.path.join(self.tmp, "voices.json")
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), voice.Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
+
+    def tearDown(self):
+        import shutil
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        voice.STATE, voice.INDEX_FILE = self.saved
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def request(self, path, data=None, method=None, **headers):
+        import urllib.error
+        import urllib.request
+        request = urllib.request.Request(self.url + path, data=data, method=method,
+                                         headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, dict(response.headers)
+        except urllib.error.HTTPError as exc:
+            with exc:
+                return exc.code, dict(exc.headers)
+
+    def test_no_website_is_told_it_may_read_the_answers(self):
+        code, headers = self.request("/voices")
+        self.assertEqual(code, 200)
+        self.assertNotIn("Access-Control-Allow-Origin", headers)
+
+    def test_another_site_cannot_make_it_speak(self):
+        code, _ = self.request("/speak", data=b'{"text": "hello"}',
+                               Origin="https://evil.example")
+        self.assertEqual(code, 403)
+
+    def test_another_site_cannot_delete_a_voice(self):
+        code, _ = self.request("/voices/abc", method="DELETE",
+                               **{"Sec-Fetch-Site": "cross-site"})
+        self.assertEqual(code, 403)
+
+    def test_a_rebound_host_name_is_refused(self):
+        code, _ = self.request("/voices", Host="evil.example:8421")
+        self.assertEqual(code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

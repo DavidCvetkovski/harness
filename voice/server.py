@@ -19,10 +19,12 @@ import argparse
 import contextlib
 import hashlib
 import io
+import ipaddress
 import json
 import os
 import threading
 import time
+import urllib.parse
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -402,6 +404,49 @@ def _resample(audio, rate):
 # HTTP
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# Who may ask
+# --------------------------------------------------------------------------
+
+# The same two checks as harness/server.py, kept here because this runs as a
+# script in its own environment and does not import Harness.
+#
+# This answered every website with Access-Control-Allow-Origin: *. Nothing
+# needed it — enroll.html is served from here, and Harness proxies from Python
+# — but it let any page you visited list your voices, download the recording
+# each was made from, and have it say whatever the page liked in your voice.
+
+def host_allowed(host):
+    """A Host header that names this machine, not a domain rebound onto it."""
+    if host is None:
+        return True
+    name = host.strip().lower()
+    if name.startswith("["):
+        name = name[1:name.find("]")] if "]" in name else name[1:]
+    elif name.count(":") == 1:
+        name = name.split(":")[0]
+    if not name:
+        return False
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        pass
+    return (name == "localhost" or "." not in name
+            or name.endswith((".localhost", ".local", ".ts.net")))
+
+
+def cross_site(headers):
+    """True if a request that changes something came from another site's page."""
+    origin = headers.get("Origin")
+    if origin is None:
+        return (headers.get("Sec-Fetch-Site") or "").lower() == "cross-site"
+    if origin == "null":
+        return True
+    return (urllib.parse.urlparse(origin).netloc.lower()
+            != (headers.get("Host") or "").strip().lower())
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     voice = None
@@ -416,19 +461,27 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
-        # Harness runs on another port, so every call here is cross-origin.
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         for name, value in headers.items():
             self.send_header(name.replace("_", "-"), value)
         self.end_headers()
         self.wfile.write(data)
 
+    def refused(self, changes=False):
+        """Turn away a foreign host, or another site's page changing things."""
+        if not host_allowed(self.headers.get("Host")):
+            self.reply(403, {"error": "unrecognised host name"})
+            return True
+        if changes and cross_site(self.headers):
+            self.reply(403, {"error": "refused: this came from another website"})
+            return True
+        return False
+
     def do_OPTIONS(self):
         self.reply(204, b"", "text/plain")
 
     def do_GET(self):
+        if self.refused():
+            return
         path = self.path.split("?")[0]
         if path == "/":
             with open(os.path.join(HERE, "enroll.html"), "rb") as handle:
@@ -457,7 +510,11 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404, {"error": "not found"})
 
     def body(self):
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = max(0, int(self.headers.get("Content-Length", 0)))
+        except (TypeError, ValueError):
+            length = 0
+        length = min(length, 50 * 1024 * 1024)
         return self.rfile.read(length) if length else b""
 
     def json_body(self):
@@ -467,6 +524,9 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def do_DELETE(self):
+        self.body()             # drained either way, or it poisons the next request
+        if self.refused(changes=True):
+            return
         path = self.path.split("?")[0]
         if path.startswith("/voices/"):
             voice_id = path.split("/")[2]
@@ -476,6 +536,9 @@ class Handler(BaseHTTPRequestHandler):
         self.reply(404, {"error": "not found"})
 
     def do_POST(self):
+        if self.refused(changes=True):
+            self.body()         # drain it, so the connection stays usable
+            return
         path = self.path.split("?")[0]
         if path in ("/voices", "/enroll"):
             return self.enroll()

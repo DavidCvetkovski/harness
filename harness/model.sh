@@ -229,10 +229,22 @@ fi
 echo "Ctrl-C to stop."
 echo
 
-# Bound to loopback deliberately: the server sets permissive CORS and no API
-# key, so it must not be exposed on 0.0.0.0.
+# Bound to loopback deliberately: there is no API key, so it must not be
+# exposed on 0.0.0.0. Loopback alone is not enough, though: the server answers
+# every website with permissive CORS, so any page you visited could run this
+# model in the background. Harness calls it from Python, with no Origin at all,
+# and the server's own page is same-origin — so only localhost pages are let in.
+#
+# --cache-ram caps the copies of earlier prompts llama-server keeps in memory so
+# a chat can be picked up again without re-reading it. The default is 8 GB, and
+# on a 16 GB Mac that is the model's memory: after a day of chats macOS had
+# compressed 4.2 of the server's 4.6 GB, and generation fell from ~19 to ~3.5
+# tokens a second. A gigabyte still holds the last few conversations.
+CACHE_RAM="${CACHE_RAM:-1024}"
 exec "$LLAMA_BIN" \
     -m "$MODEL" \
+    --cors-origins localhost \
+    --cache-ram "$CACHE_RAM" \
     ${MMPROJ:+--mmproj "$MMPROJ"} \
     ${MMPROJ:+${IMAGE_MIN_TOKENS:+--image-min-tokens "$IMAGE_MIN_TOKENS"}} \
     --host "$HOST" \
