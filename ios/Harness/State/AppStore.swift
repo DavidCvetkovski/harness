@@ -130,6 +130,29 @@ final class AppStore {
         }
     }
 
+    /// The folder Harness treats as "here" — relative paths and "this folder"
+    /// in a prompt resolve against it. Empty when none is set.
+    var projectDir: String {
+        config?.projectDir ?? ""
+    }
+
+    /// Just the last path component, for the composer chip.
+    var projectName: String {
+        let trimmed = projectDir.hasSuffix("/") ? String(projectDir.dropLast()) : projectDir
+        return trimmed.split(separator: "/").last.map(String.init) ?? ""
+    }
+
+    // MARK: - Project Folder
+
+    func browseFolders(path: String) async throws -> FoldersResponse {
+        guard let client else { throw HarnessError.network("Not connected.") }
+        return try await client.folders(path: path)
+    }
+
+    func setProjectDir(_ path: String) async {
+        await updateConfig(["project_dir": path])
+    }
+
     // MARK: - Connection Lifecycle
 
     func restoreConnectionIfSaved() async {

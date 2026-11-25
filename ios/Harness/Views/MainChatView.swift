@@ -9,6 +9,12 @@ struct MainChatView: View {
     @State private var showCamera = false
     @State private var exportText: String?
     @State private var showExportSheet = false
+    @State private var showFolderPicker = false
+    /// Step groups the user opened (or, for a finished run, closed again).
+    @State private var expandedGroups: Set<String> = []
+    /// Whether the end of the transcript is on screen. Streaming only follows
+    /// along while it is, so scrolling up to read isn't yanked back down.
+    @State private var isAtBottom = true
     @FocusState private var composerFocused: Bool
 
     private let starterPrompts: [(title: String, prompt: String)] = [
@@ -53,6 +59,9 @@ struct MainChatView: View {
         }
         .sheet(isPresented: $store.showSettingsSheet) {
             SettingsSheet(store: store)
+        }
+        .sheet(isPresented: $showFolderPicker) {
+            FolderPickerSheet(store: store)
         }
         .photosPicker(
             isPresented: $showPhotoPicker,
@@ -119,13 +128,13 @@ struct MainChatView: View {
                 store.showSessionsSheet = true
                 Task { await store.refreshSessionsList() }
             } label: {
-                Image(systemName: "sidebar.left")
+                Image(systemName: "clock.arrow.circlepath")
                     .font(.body)
                     .foregroundStyle(HarnessTheme.dim)
                     .frame(width: 34, height: 34)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Sessions")
+            .accessibilityLabel("History")
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -219,6 +228,26 @@ struct MainChatView: View {
             .overlay(RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.35), lineWidth: 0.75))
     }
 
+    private func chipLabel(icon: String, text: String, isOn: Bool) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption2)
+            // Shortened by hand rather than with a max-width frame: a
+            // flexible frame claims its full width even for a short label,
+            // which pushed the next chip into the middle of the row.
+            Text(text.count > 20 ? String(text.prefix(19)) + "…" : text)
+                .font(HarnessTheme.monoSmall)
+                .lineLimit(1)
+        }
+        .foregroundStyle(isOn ? HarnessTheme.amber : HarnessTheme.dim)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(isOn ? HarnessTheme.amber.opacity(0.12) : HarnessTheme.panel2)
+        .overlay(RoundedRectangle(cornerRadius: 4)
+            .stroke(isOn ? HarnessTheme.amber.opacity(0.5) : HarnessTheme.line, lineWidth: 1))
+        .fixedSize()
+    }
+
     // MARK: - Transcript
 
     private var transcriptArea: some View {
@@ -233,11 +262,38 @@ struct MainChatView: View {
                             return false
                         })?.id
 
-                        ForEach(store.transcript) { item in
-                            rowView(for: item, lastAssistantId: lastAssistantId)
-                                .id(item.id)
+                        let rows = TranscriptRow.build(from: store.transcript)
+                        let liveGroupId: String? = {
+                            guard store.isStreaming, case .steps(let id, _) = rows.last else { return nil }
+                            return id
+                        }()
+
+                        ForEach(rows) { row in
+                            switch row {
+                            case .single(let item):
+                                rowView(for: item, lastAssistantId: lastAssistantId)
+                                    .id(row.id)
+                            case .steps(let groupId, let items):
+                                StepsGroupView(
+                                    items: items,
+                                    isLive: groupId == liveGroupId,
+                                    isExpanded: expandedGroups.contains(groupId),
+                                    onToggle: {
+                                        if expandedGroups.contains(groupId) {
+                                            expandedGroups.remove(groupId)
+                                        } else {
+                                            expandedGroups.insert(groupId)
+                                        }
+                                    }
+                                ) { item in
+                                    rowView(for: item, lastAssistantId: lastAssistantId)
+                                }
+                                .id(row.id)
+                            }
                         }
                         Color.clear.frame(height: 8).id("bottom-anchor")
+                            .onAppear { isAtBottom = true }
+                            .onDisappear { isAtBottom = false }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 14)
@@ -245,12 +301,44 @@ struct MainChatView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.transcript.count) { _, _ in
+                // A message you just sent, or a request waiting on your
+                // answer, always brings you down to it.
+                let needsYou: Bool = {
+                    switch store.transcript.last {
+                    case .user, .approval: return true
+                    default: return false
+                    }
+                }()
+                guard isAtBottom || needsYou else { return }
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo("bottom-anchor", anchor: .bottom)
                 }
             }
             .onChange(of: store.transcript.last) { _, _ in
+                guard isAtBottom else { return }
                 proxy.scrollTo("bottom-anchor", anchor: .bottom)
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !isAtBottom && !store.transcript.isEmpty {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            proxy.scrollTo("bottom-anchor", anchor: .bottom)
+                        }
+                    } label: {
+                        Image(systemName: "arrow.down")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(store.isStreaming ? HarnessTheme.ink : HarnessTheme.text)
+                            .frame(width: 38, height: 38)
+                            .background(Circle().fill(store.isStreaming ? HarnessTheme.amber : HarnessTheme.panel2))
+                            .overlay(Circle().stroke(HarnessTheme.lineHot, lineWidth: 1))
+                            .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 12)
+                    .transition(.scale.combined(with: .opacity))
+                    .accessibilityLabel("Jump to latest")
+                }
             }
         }
     }
@@ -448,30 +536,42 @@ struct MainChatView: View {
             }
             .padding(.horizontal, 12)
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Button {
                     store.thinkFirst.toggle()
+                    UISelectionFeedbackGenerator().selectionChanged()
                 } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: store.thinkFirst ? "brain.head.profile.fill" : "brain.head.profile")
-                            .font(.caption2)
-                        Text(store.thinkFirst ? "Think first: ON" : "Think first: OFF")
-                            .font(HarnessTheme.monoSmall)
-                    }
-                    .foregroundStyle(store.thinkFirst ? HarnessTheme.amber : HarnessTheme.dim)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(store.thinkFirst ? HarnessTheme.amber.opacity(0.12) : HarnessTheme.panel2)
-                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(store.thinkFirst ? HarnessTheme.amber.opacity(0.5) : HarnessTheme.line, lineWidth: 1))
+                    chipLabel(
+                        icon: store.thinkFirst ? "brain.head.profile.fill" : "brain.head.profile",
+                        text: "Think first",
+                        isOn: store.thinkFirst
+                    )
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(store.thinkFirst ? "On" : "Off")
 
-                Spacer()
+                Button {
+                    showFolderPicker = true
+                } label: {
+                    chipLabel(
+                        icon: store.projectDir.isEmpty ? "folder" : "folder.fill",
+                        text: store.projectDir.isEmpty ? "No project" : store.projectName,
+                        isOn: !store.projectDir.isEmpty
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(store.client == nil)
+                .accessibilityLabel("Project folder")
+                .accessibilityValue(store.projectDir.isEmpty ? "None" : store.projectDir)
+
+                Spacer(minLength: 4)
 
                 if let ctx = store.capabilities?.nCtx, ctx > 0 {
                     Text("\(ctx / 1024)K ctx")
                         .font(HarnessTheme.monoSmall)
                         .foregroundStyle(HarnessTheme.faint)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
             .padding(.horizontal, 12)

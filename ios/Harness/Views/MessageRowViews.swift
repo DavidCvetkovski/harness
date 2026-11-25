@@ -73,37 +73,48 @@ struct UserTurnView: View {
     let localImages: [Data]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("YOU")
                 .font(HarnessTheme.label)
                 .tracking(1.1)
-                .foregroundStyle(HarnessTheme.dim)
+                .foregroundStyle(HarnessTheme.amberDim)
 
-            if !imageUrls.isEmpty || !localImages.isEmpty {
-                let count = max(imageUrls.count, localImages.count)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(0..<count, id: \.self) { i in
-                            AuthenticatedImageView(
-                                store: store,
-                                urlPath: i < imageUrls.count ? imageUrls[i] : "",
-                                localData: i < localImages.count ? localImages[i] : nil,
-                                height: 108
-                            )
+            // Same treatment as the web app: a thin amber rule down the left
+            // edge, so your turns read apart from Harness's at a glance.
+            VStack(alignment: .leading, spacing: 8) {
+                if !imageUrls.isEmpty || !localImages.isEmpty {
+                    let count = max(imageUrls.count, localImages.count)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(0..<count, id: \.self) { i in
+                                AuthenticatedImageView(
+                                    store: store,
+                                    urlPath: i < imageUrls.count ? imageUrls[i] : "",
+                                    localData: i < localImages.count ? localImages[i] : nil,
+                                    height: 108
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            if !text.isEmpty {
-                Text(text)
-                    .font(.body)
-                    .foregroundStyle(HarnessTheme.text)
-                    .textSelection(.enabled)
+                if !text.isEmpty {
+                    Text(text)
+                        .font(.body)
+                        .foregroundStyle(HarnessTheme.text)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(HarnessTheme.amberDim)
+                    .frame(width: 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 6)
+        .padding(.top, 10)
+        .padding(.bottom, 2)
     }
 }
 
@@ -220,7 +231,9 @@ struct ToolCardView: View {
                             .textSelection(.enabled)
                     }
                     if let output, !output.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
+                        // Both axes: long output used to be clipped at the
+                        // frame's height with no way to reach the rest.
+                        ScrollView([.horizontal, .vertical], showsIndicators: false) {
                             Text(output)
                                 .font(HarnessTheme.monoSmall)
                                 .foregroundStyle(isError ? HarnessTheme.rust : HarnessTheme.dim)
@@ -380,12 +393,7 @@ struct AssistantTurnView: View {
             ForEach(Array(MarkdownSplitter.split(text).enumerated()), id: \.offset) { _, segment in
                 switch segment {
                 case .prose(let prose):
-                    Text(styledMarkdown(prose))
-                        .font(HarnessTheme.reading)
-                        .foregroundStyle(HarnessTheme.text)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    ProseBlocksView(text: prose)
                 case .code(let lang, let code):
                     CodeBlockCardView(language: lang, code: code)
                 }
@@ -446,15 +454,6 @@ struct AssistantTurnView: View {
         .padding(.vertical, 6)
     }
 
-    private func styledMarkdown(_ input: String) -> AttributedString {
-        if let attr = try? AttributedString(
-            markdown: input,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        ) {
-            return attr
-        }
-        return AttributedString(input)
-    }
 }
 
 struct CodeBlockCardView: View {

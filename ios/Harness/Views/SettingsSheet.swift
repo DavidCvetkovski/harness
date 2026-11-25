@@ -119,10 +119,10 @@ struct SettingsSheet: View {
 
         if let sys = store.systemState {
             Section("Mac Health") {
-                LabeledContent("Model RAM", value: sys.model.running ? String(format: "%.2f GB", sys.model.gb) : "Stopped")
+                LabeledContent("Model", value: modelMemoryText(sys))
                 LabeledContent("Memory Free", value: sys.memoryFree)
-                LabeledContent("Disk Free", value: sys.diskFree)
-                LabeledContent("Uptime", value: sys.uptime)
+                LabeledContent("Disk Free", value: Self.readableSize(sys.diskFree))
+                LabeledContent("Mac Uptime", value: sys.uptime)
                 if !sys.tailnet.isEmpty {
                     LabeledContent("Tailscale IP", value: sys.tailnet)
                 }
@@ -145,6 +145,27 @@ struct SettingsSheet: View {
             }
         }
         .listRowBackground(HarnessTheme.panel)
+    }
+
+    /// The model server's resident size badly undercounts it: the weights sit
+    /// in GPU-wired memory that RSS leaves out, so a 6 GB model showed as
+    /// "0.01 GB". The installed-model list carries the estimate model.sh
+    /// works from, which is the honest figure.
+    private func modelMemoryText(_ sys: SystemState) -> String {
+        guard sys.model.running else { return "Stopped" }
+        if let active = store.modelsResponse?.models.first(where: \.active), active.estGb > 0 {
+            return String(format: "Running · ~%.1f GB", active.estGb)
+        }
+        return "Running"
+    }
+
+    /// `df -h` sizes ("75Gi", "1.2Ti") into the units people read ("75 GB").
+    static func readableSize(_ raw: String) -> String {
+        let units = ["Ki": "KB", "Mi": "MB", "Gi": "GB", "Ti": "TB", "K": "KB", "M": "MB", "G": "GB", "T": "TB"]
+        for (suffix, unit) in units.sorted(by: { $0.key.count > $1.key.count }) where raw.hasSuffix(suffix) {
+            return "\(raw.dropLast(suffix.count)) \(unit)"
+        }
+        return raw
     }
 
     // MARK: - Model Tab

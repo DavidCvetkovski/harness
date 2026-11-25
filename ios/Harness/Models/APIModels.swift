@@ -240,6 +240,14 @@ struct LogsResponse: Codable, Equatable {
     let text: String
 }
 
+/// One level of the Mac's folder tree, from `/api/folders` — what the project
+/// picker walks through to choose the folder Harness treats as "here".
+struct FoldersResponse: Codable, Equatable {
+    let path: String
+    let parent: String
+    let folders: [String]
+}
+
 struct VoiceEntry: Codable, Identifiable, Equatable {
     let id: String
     let name: String

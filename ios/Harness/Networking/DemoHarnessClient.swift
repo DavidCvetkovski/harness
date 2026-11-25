@@ -127,6 +127,7 @@ final class DemoHarnessClient: HarnessAPI, @unchecked Sendable {
             if let v = patch["approve_commands"] as? String { cfg.approveCommands = v }
             if let v = patch["system_prompt"] as? String { cfg.systemPrompt = v }
             if let v = patch["tools"] as? [String: Bool] { cfg.tools = v }
+            if let v = patch["project_dir"] as? String { cfg.projectDir = v }
             return cfg
         }
     }
@@ -242,6 +243,18 @@ final class DemoHarnessClient: HarnessAPI, @unchecked Sendable {
     }
 
     func systemAction(_ action: String, extra: [String: Any]) async throws {}
+
+    func folders(path: String) async throws -> FoldersResponse {
+        let tree: [String: [String]] = [
+            "/Users/demo": ["Desktop", "Developer", "Documents", "Downloads", "Pictures"],
+            "/Users/demo/Developer": ["Harness", "LyricStats", "Mimic"],
+            "/Users/demo/Documents": ["Lightroom", "Thesis"],
+        ]
+        let base = (path == "~" || path.isEmpty) ? "/Users/demo" : path
+        let parent = (base as NSString).deletingLastPathComponent
+        return FoldersResponse(path: base, parent: parent.isEmpty ? "/" : parent,
+                               folders: tree[base] ?? [])
+    }
 
     func logs(kind: String) async throws -> LogsResponse {
         LogsResponse(name: "\(kind).log", text: "[demo] Harness running smoothly on Apple Silicon.\n[demo] 18.4 tok/s · KV cache reuse 99%.")

@@ -48,6 +48,7 @@ protocol HarnessAPI: Sendable {
     func runAutomation(id: String) async throws
     func systemAction(_ action: String, extra: [String: Any]) async throws
     func logs(kind: String) async throws -> LogsResponse
+    func folders(path: String) async throws -> FoldersResponse
     func uploadImage(data: Data, mimeType: String) async throws -> UploadResponse
     func fetchData(path: String) async throws -> Data
     func approve(id: String, allow: Bool, always: Bool) async throws
@@ -207,6 +208,13 @@ final class LiveHarnessClient: HarnessAPI, @unchecked Sendable {
 
     func logs(kind: String) async throws -> LogsResponse {
         try await get("/api/logs?\(kind)")
+    }
+
+    func folders(path: String) async throws -> FoldersResponse {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&+=?#")
+        let encoded = path.addingPercentEncoding(withAllowedCharacters: allowed) ?? path
+        return try await get("/api/folders?path=\(encoded)")
     }
 
     func uploadImage(data: Data, mimeType: String) async throws -> UploadResponse {
