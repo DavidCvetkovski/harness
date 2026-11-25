@@ -15,7 +15,12 @@ enum BackendSource: Equatable {
     var label: String {
         switch self {
         case .bundled: return "Bundled inside Harness.app"
-        case .localBinary(let url): return url.path
+        case .localBinary(let url):
+            let home = FileManager.default.homeDirectoryForCurrentUser.path
+            if url.path.hasPrefix(home) {
+                return "~" + url.path.dropFirst(home.count)
+            }
+            return url.path
         case .notFound: return "Not found"
         }
     }

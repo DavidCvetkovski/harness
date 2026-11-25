@@ -5,10 +5,11 @@ import SwiftUI
 struct HarnessMacApp: App {
     @State private var store = AppStore()
     @State private var supervisor = BackendSupervisor()
+    @State private var ui = MacUIState()
 
     var body: some Scene {
         WindowGroup("Harness", id: "main") {
-            MacWorkspaceView(store: store, supervisor: supervisor)
+            MacWorkspaceView(store: store, supervisor: supervisor, ui: ui)
                 .frame(minWidth: 860, minHeight: 580)
                 .preferredColorScheme(.dark)
                 .tint(HarnessTheme.amber)
@@ -17,7 +18,8 @@ struct HarnessMacApp: App {
                     await supervisor.connectOrStart(store: store, autoStart: true)
                 }
         }
-        .defaultSize(width: 1120, height: 760)
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1160, height: 780)
         .commands {
             CommandGroup(replacing: .newItem) {
                 Button("New Chat") {
@@ -26,6 +28,11 @@ struct HarnessMacApp: App {
                 .keyboardShortcut("n", modifiers: .command)
             }
             CommandMenu("Harness") {
+                Button(ui.showSidebar ? "Hide History Sidebar" : "Show History Sidebar") {
+                    withAnimation(.easeInOut(duration: 0.18)) { ui.showSidebar.toggle() }
+                }
+                .keyboardShortcut("\\", modifiers: .command)
+
                 Button("Refresh Status") {
                     Task { await store.refreshAll() }
                 }
@@ -50,7 +57,7 @@ struct HarnessMacApp: App {
         }
 
         MenuBarExtra {
-            MacMenuBarPopover(store: store, supervisor: supervisor)
+            MacMenuBarPopover(store: store, supervisor: supervisor, ui: ui)
                 .preferredColorScheme(.dark)
                 .tint(HarnessTheme.amber)
         } label: {
@@ -61,8 +68,8 @@ struct HarnessMacApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            MacSettingsView(store: store, supervisor: supervisor)
-                .frame(minWidth: 640, minHeight: 500)
+            MacSettingsView(store: store, supervisor: supervisor, ui: ui)
+                .frame(minWidth: 780, idealWidth: 860, minHeight: 540, idealHeight: 620)
                 .preferredColorScheme(.dark)
                 .tint(HarnessTheme.amber)
         }
@@ -101,6 +108,7 @@ struct HarnessMacApp: App {
 struct MacMenuBarPopover: View {
     @Bindable var store: AppStore
     @Bindable var supervisor: BackendSupervisor
+    @Bindable var ui: MacUIState
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @State private var showQR = false
@@ -117,10 +125,13 @@ struct MacMenuBarPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                HarnessBrandMark(size: 32)
+                HarnessBrandMark(size: 34)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Circle().fill(ledColor).frame(width: 7, height: 7)
+                        Circle()
+                            .fill(ledColor)
+                            .frame(width: 7, height: 7)
+                            .shadow(color: ledColor.opacity(0.6), radius: 3)
                         Text(store.connectionState == .connected ? store.activeModelName : "Harness Offline")
                             .font(.system(size: 12.5, weight: .semibold, design: .monospaced))
                             .foregroundStyle(HarnessTheme.text)
@@ -135,21 +146,21 @@ struct MacMenuBarPopover: View {
             }
 
             if let sys = store.systemState, store.connectionState == .connected {
-                HStack(spacing: 12) {
-                    statChip("RAM FREE", sys.memoryFree)
-                    statChip("DISK", sys.diskFree)
-                    statChip("MODE", sys.mode.uppercased())
+                HStack(spacing: 8) {
+                    statChip("RAM FREE", sys.memoryFree, tint: MacFormatting.memoryTint(sys.memoryFree))
+                    statChip("DISK", MacFormatting.readableSize(sys.diskFree), tint: HarnessTheme.text)
+                    statChip("MODE", sys.mode.uppercased(), tint: sys.tls == true ? HarnessTheme.sage : HarnessTheme.dim)
                 }
             }
 
-            Divider().background(HarnessTheme.line)
+            Rectangle().fill(HarnessTheme.line).frame(height: 1)
 
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 menuButton("Open Harness Window", systemImage: "macwindow") {
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "main")
                 }
-                menuButton("New Chat", systemImage: "square.and.pencil") {
+                menuButton("New Chat", systemImage: "square.and.pencil", shortcut: "⌘N") {
                     store.newChat()
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "main")
@@ -169,7 +180,7 @@ struct MacMenuBarPopover: View {
 
                 if let url = phonePairingURL {
                     menuButton(showQR ? "Hide iPhone QR Code" : "Pair iPhone (QR Code)", systemImage: "qrcode") {
-                        showQR.toggle()
+                        withAnimation(.easeOut(duration: 0.15)) { showQR.toggle() }
                     }
                     if showQR {
                         VStack(spacing: 8) {
@@ -190,13 +201,14 @@ struct MacMenuBarPopover: View {
                     }
                 }
 
-                menuButton("Settings…", systemImage: "slider.horizontal.3") {
+                menuButton("Settings…", systemImage: "slider.horizontal.3", shortcut: "⌘,") {
+                    ui.selectedSettingsPane = .overview
                     NSApp.activate(ignoringOtherApps: true)
                     openSettings()
                 }
             }
 
-            Divider().background(HarnessTheme.line)
+            Rectangle().fill(HarnessTheme.line).frame(height: 1)
 
             HStack {
                 Toggle("Launch at Login", isOn: Binding(
@@ -211,12 +223,12 @@ struct MacMenuBarPopover: View {
                     NSApp.terminate(nil)
                 }
                 .buttonStyle(.plain)
-                .font(.caption)
+                .font(.caption.weight(.medium))
                 .foregroundStyle(HarnessTheme.rust)
             }
         }
         .padding(14)
-        .frame(width: 300)
+        .frame(width: 312)
         .background(HarnessTheme.panel)
     }
 
@@ -233,35 +245,46 @@ struct MacMenuBarPopover: View {
         return store.isVisionAvailable ? "Ready · Vision enabled" : "Ready"
     }
 
-    private func statChip(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+    private func statChip(_ label: String, _ value: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
             Text(label)
                 .font(.system(size: 8.5, weight: .semibold))
+                .tracking(0.6)
                 .foregroundStyle(HarnessTheme.faint)
             Text(value.isEmpty ? "—" : value)
-                .font(HarnessTheme.monoSmall)
-                .foregroundStyle(HarnessTheme.text)
+                .font(HarnessTheme.monoSmall.weight(.medium))
+                .foregroundStyle(tint)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .harnessCard(border: HarnessTheme.line, background: HarnessTheme.panel2)
+        .padding(.vertical, 6)
+        .background(HarnessTheme.panel2)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(HarnessTheme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
-    private func menuButton(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    private func menuButton(_ title: String, systemImage: String, shortcut: String? = nil,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 Image(systemName: systemImage)
+                    .font(.caption)
                     .frame(width: 16)
                     .foregroundStyle(HarnessTheme.amber)
                 Text(title)
                     .font(.subheadline)
                     .foregroundStyle(HarnessTheme.text)
                 Spacer()
+                if let shortcut {
+                    Text(shortcut)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(HarnessTheme.faint)
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .contentShape(Rectangle())
+            .macHoverRow(cornerRadius: 6)
         }
         .buttonStyle(.plain)
     }

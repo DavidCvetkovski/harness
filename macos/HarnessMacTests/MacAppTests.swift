@@ -88,4 +88,11 @@ final class MacAppTests: XCTestCase {
             return false
         }))
     }
+
+    func testMacFormattingReadableSizeAndSettingsPanes() {
+        XCTAssertEqual(MacFormatting.readableSize("75Gi"), "75 GB")
+        XCTAssertEqual(MacFormatting.readableSize("1.2Ti"), "1.2 TB")
+        XCTAssertEqual(MacFormatting.readableSize(""), "—")
+        XCTAssertEqual(MacSettingsPane.allCases.count, 8)
+    }
 }

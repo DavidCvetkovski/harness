@@ -10,6 +10,7 @@
 		060D58B9F2B3A3857E76FF1F /* SSEParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4DF22009026D561A6F750D0 /* SSEParser.swift */; };
 		1BC1F8444B699D3864D1CB0D /* ProseBlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1404165C6C0D1D5A0CCCCEA /* ProseBlocksView.swift */; };
 		297ADC9DBD630A6CFAFDF7F8 /* HarnessTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4D88A07ED7499C20702F243 /* HarnessTheme.swift */; };
+		59EF89937880960CCD82496A /* MacUIState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3672ACDDB973AE400466D714 /* MacUIState.swift */; };
 		65C855629697F9553F5F4612 /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F56FF62430E88D5295CA9A56 /* MacSettingsView.swift */; };
 		73A4B52ACE4E6AFC037E13D1 /* SessionDates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A05A4D8CFF3F53615181D6BB /* SessionDates.swift */; };
 		74E5D3EC6885A0C04F1F2929 /* PlatformSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8ACD8F729317211AB8221B /* PlatformSupport.swift */; };
@@ -46,6 +47,7 @@
 		1FDB1586B1AA3FA650038DE5 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
 		221EA280CBE6922DB42120A4 /* HarnessMacTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarnessMacTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2EE21FD7F26504E01BEACE87 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		3672ACDDB973AE400466D714 /* MacUIState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacUIState.swift; sourceTree = "<group>"; };
 		38150D10E5DFDBB214E505AC /* StepsGroupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StepsGroupView.swift; path = ../ios/Harness/Views/StepsGroupView.swift; sourceTree = "<group>"; };
 		4B25490208F882AFF67D4E19 /* MacNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacNotifications.swift; sourceTree = "<group>"; };
 		4DD686F86E8E4E90D1EEF16B /* DemoHarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarnessClient.swift; sourceTree = "<group>"; };
@@ -132,6 +134,7 @@
 				B8A8F2024E131063DA5C087C /* Info.plist */,
 				4B25490208F882AFF67D4E19 /* MacNotifications.swift */,
 				F56FF62430E88D5295CA9A56 /* MacSettingsView.swift */,
+				3672ACDDB973AE400466D714 /* MacUIState.swift */,
 				C718E2DF53A276A8949C3ECC /* MacWorkspaceView.swift */,
 				8EC4D3703BC0A33D9F6D8065 /* QRCodeView.swift */,
 			);
@@ -333,6 +336,7 @@
 				B3612E70A83A2A1682CD4534 /* KeychainStore.swift in Sources */,
 				EC671A4E1E3EE51865349301 /* MacNotifications.swift in Sources */,
 				65C855629697F9553F5F4612 /* MacSettingsView.swift in Sources */,
+				59EF89937880960CCD82496A /* MacUIState.swift in Sources */,
 				AB5C883F6BB5709A9C0EF635 /* MacWorkspaceView.swift in Sources */,
 				CCD5CF7294C37D896736F596 /* MessageRowViews.swift in Sources */,
 				74E5D3EC6885A0C04F1F2929 /* PlatformSupport.swift in Sources */,
