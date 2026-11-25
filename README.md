@@ -88,9 +88,9 @@ See [voice/README.md](voice/README.md).
 
 ## Safety
 
-Eleven tools: list files, find files by name, read, write, edit, search the
-web, fetch a page, run a shell command, check how the Mac is doing, look at a
-picture (with a vision model loaded), send an email.
+Twelve tools: list files, find files by name, search inside files, read, write,
+edit, search the web, fetch a page, run a shell command, check how the Mac is
+doing, look at a picture (with a vision model loaded), send an email.
 The rules around them:
 
 | Rule | Why |
@@ -118,8 +118,13 @@ about destructive commands — but the refusals above are not settings.
 | `--remote` | anywhere, via Tailscale | no — Tailscale already authenticated the device |
 
 `--remote` binds only the Tailscale address, so the socket does not exist on
-your local network or the public internet. Add it to your home screen from the
-browser's share menu and it opens without the Safari chrome.
+your local network or the public internet. Add `--tls` to serve HTTPS using
+Tailscale certificates (`tailscale cert`).
+
+You can either add the web UI to your home screen from Safari, or run the
+native SwiftUI iOS companion app in [`ios/`](ios/README.md) (with QR connect,
+streaming diffs/approvals, photo uploads, background session recovery, and an
+offline demo mode).
 
 ## Tests
 
@@ -127,11 +132,11 @@ browser's share menu and it opens without the Safari chrome.
 python3 -m unittest discover -s tests -t .
 ```
 
-129 tests, no test framework to install — the suite is standard library, like
-the rest of the project. Most of them are about the guards: what a protected
-path is, which commands stop and ask, that a refusal really does leave the disk
-alone, and that one client cancelling a turn cannot silently refuse an approval
-another client is looking at.
+295 Python tests, no test framework to install — the suite is standard library,
+like the rest of the project. Most of them are about the guards: what a
+protected path is, which commands stop and ask, that a refusal really does
+leave the disk alone, and that one client cancelling a turn cannot silently
+refuse an approval another client is looking at.
 
 They redirect `harness.config`'s paths to a temporary directory first, so
 running the suite on the machine Harness is installed on cannot disturb a real
@@ -143,12 +148,13 @@ session, automation or token.
 bin/harness          entry point — sets PYTHONPATH and runs harness.cli
 harness/
   cli.py             start / stop / status
-  server.py          HTTP routes, streaming, approvals, admin actions
+  server.py          HTTP/HTTPS routes, streaming, uploads, approvals, admin actions
   agent.py           the loop: stream, call a tool, feed the result back
-  tools.py           the eleven tools, and the guards around them
+  tools.py           the twelve tools, and the guards around them
   config.py          settings, presets, automations, access token
   ui.html            the whole front end, one file
   model.sh           llama.cpp launcher
+ios/                 native SwiftUI iOS companion app + unit tests (zero dependencies)
 voice/               optional voice sidecar — its own process, its own venv
 tests/               the guards, the loop, sessions, scheduling, concurrency
 ```
