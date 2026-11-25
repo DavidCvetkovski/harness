@@ -46,12 +46,16 @@ targets:
         NSCameraUsageDescription: Harness uses the camera to scan the setup QR code shown on your Mac and to take photos you attach to vision messages.
         NSPhotoLibraryUsageDescription: Harness accesses your photo library so you can attach images to send to your Mac's local vision model.
         NSLocalNetworkUsageDescription: Harness connects to the Harness server running on your Mac over your local Wi-Fi network or Tailscale.
+        # Plain HTTP to the Mac is allowed everywhere, because the address is
+        # whatever the user's Mac happens to have: Tailscale hands out
+        # 100.64.0.0/10, which iOS does not count as local, so with only
+        # NSAllowsLocalNetworking the first connection failed with "App
+        # Transport Security policy requires the use of a secure connection".
+        # The traffic is already encrypted by Tailscale's WireGuard tunnel.
+        # NSAllowsLocalNetworking must not be listed alongside: when it is,
+        # iOS ignores NSAllowsArbitraryLoads.
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
-          NSExceptionDomains:
-            ts.net:
-              NSIncludesSubdomains: true
-              NSExceptionAllowsInsecureHTTPLoads: true
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         INFOPLIST_FILE: Harness/Info.plist

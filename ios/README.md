@@ -32,7 +32,7 @@ Right now `Info.plist` includes an App Transport Security exception for `*.ts.ne
    harness --remote --tls
    ```
    Harness automatically provisions and renews certificates under `~/.harness/certs/` via `tailscale cert` and serves `https://<your-mac>.<tailnet>.ts.net:8420`.
-3. Remove the `NSExceptionDomains` (`ts.net`) block from [`ios/project.yml`](project.yml) (and re-run `xcodegen generate`, or remove it directly in [`ios/Harness/Info.plist`](Harness/Info.plist)) so App Store Review sees strict ATS everywhere except local networking.
+3. The app allows plain HTTP (`NSAllowsArbitraryLoads` in [`ios/project.yml`](project.yml)), because a Tailscale `100.x` address is not "local" to iOS and was refused outright. Tailscale already encrypts that traffic. If you switch to HTTPS only, change that key and explain the choice in App Review Notes: a self-hosted server at a user-supplied address is the accepted reason.
 
 ## TestFlight & App Store Review Notes
 
