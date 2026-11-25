@@ -128,6 +128,9 @@ final class DemoHarnessClient: HarnessAPI, @unchecked Sendable {
             if let v = patch["system_prompt"] as? String { cfg.systemPrompt = v }
             if let v = patch["tools"] as? [String: Bool] { cfg.tools = v }
             if let v = patch["project_dir"] as? String { cfg.projectDir = v }
+            if let v = patch["top_p"] as? Double { cfg.topP = v }
+            if let v = patch["top_k"] as? Int { cfg.topK = v }
+            if let v = patch["extra_safe_commands"] as? [String] { cfg.extraSafeCommands = v }
             return cfg
         }
     }

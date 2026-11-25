@@ -14,6 +14,7 @@
 		29086375504D5CA84ECD5560 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E646B7C925D4EA2C38BAF7D2 /* Assets.xcassets */; };
 		3377964AD235B6C8513CE5FE /* ProseBlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D7D901A601999EC6CED0965 /* ProseBlocksView.swift */; };
 		43A3EA0B8AC9C781873A6548 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9563D6340CEED5374E186C8 /* AppStore.swift */; };
+		502AC2D7150BFC87780B3498 /* SettingsPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DA95F02E6628CA2EF14FC52 /* SettingsPages.swift */; };
 		535D2F5BB258FCDAB4243C78 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE591AEF0E92232DBEC2A20 /* ConnectView.swift */; };
 		5F0295D2EC8F5143E02EFB65 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 099B2B08A217E2E6B11A7126 /* SettingsSheet.swift */; };
 		5FF71C02B68407395FD66D62 /* MainChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B4D55F9D3B8FB98431B679 /* MainChatView.swift */; };
@@ -53,6 +54,7 @@
 		3E3FDA24D75EE141E8D65A5F /* DemoAndStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAndStoreTests.swift; sourceTree = "<group>"; };
 		48FAD733304A3274F1367E77 /* FolderPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPickerSheet.swift; sourceTree = "<group>"; };
 		57B4D55F9D3B8FB98431B679 /* MainChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainChatView.swift; sourceTree = "<group>"; };
+		5DA95F02E6628CA2EF14FC52 /* SettingsPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPages.swift; sourceTree = "<group>"; };
 		675BD172258592C208C765B2 /* URLNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLNormalizerTests.swift; sourceTree = "<group>"; };
 		73755BCCF547B635D33A35D8 /* HarnessTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessTheme.swift; sourceTree = "<group>"; };
 		8466A20DEC0BB4C1210F292E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 				28EBF8AF9442411F2EF9C8EF /* QRScannerSheet.swift */,
 				D7D3CCD3037EC4E1C9C57B75 /* RootView.swift */,
 				9737E2148DBEF0ED82759835 /* SessionsSheet.swift */,
+				5DA95F02E6628CA2EF14FC52 /* SettingsPages.swift */,
 				099B2B08A217E2E6B11A7126 /* SettingsSheet.swift */,
 				03246B579B146F7C1F91DC77 /* StepsGroupView.swift */,
 			);
@@ -276,6 +279,7 @@
 				12CB9D80AC5B630CD4BB1576 /* RootView.swift in Sources */,
 				96CA5A33E87310BB6253D7AA /* SSEParser.swift in Sources */,
 				75F34BE8A3BFDACA1C70ACE1 /* SessionsSheet.swift in Sources */,
+				502AC2D7150BFC87780B3498 /* SettingsPages.swift in Sources */,
 				5F0295D2EC8F5143E02EFB65 /* SettingsSheet.swift in Sources */,
 				D3AD9A82011E667B184DB6FD /* StepsGroupView.swift in Sources */,
 			);

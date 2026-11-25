@@ -119,6 +119,31 @@ final class TranscriptPresentationTests: XCTestCase {
         XCTAssertEqual(table, "File       Size\n─────────  ────\nbeach.jpg  2 MB")
     }
 
+    func testApprovalChoicesUseTheServersValues() {
+        // harness/tools.py only understands these; "risky" used to be sent and
+        // silently behaved like "always".
+        XCTAssertEqual(PermissionsPage.commandModes.map(\.id), ["always", "destructive", "never"])
+        XCTAssertEqual(PermissionsPage.fileModes.map(\.id), ["always", "outside", "never"])
+    }
+
+    func testMemoryPercentParsing() {
+        XCTAssertEqual(MacStatusCard.freePercent("44%"), 44)
+        XCTAssertEqual(MacStatusCard.freePercent("7%"), 7)
+        XCTAssertNil(MacStatusCard.freePercent(""))
+    }
+
+    func testDemoAcceptsSamplingAndSafeCommandEdits() async {
+        let store = AppStore(defaults: UserDefaults(suiteName: "harness.test.\(UUID().uuidString)")!)
+        await store.attachClientForTesting(DemoHarnessClient(), demo: true)
+        await store.refreshAll()
+        await store.updateConfig(["top_p": 0.8, "top_k": 40, "extra_safe_commands": ["git status"],
+                                  "approve_commands": "destructive"])
+        XCTAssertEqual(store.config?.topP, 0.8)
+        XCTAssertEqual(store.config?.topK, 40)
+        XCTAssertEqual(store.config?.extraSafeCommands, ["git status"])
+        XCTAssertEqual(store.config?.approveCommands, "destructive")
+    }
+
     func testReadableDiskSizes() {
         XCTAssertEqual(SettingsSheet.readableSize("75Gi"), "75 GB")
         XCTAssertEqual(SettingsSheet.readableSize("1.2Ti"), "1.2 TB")
