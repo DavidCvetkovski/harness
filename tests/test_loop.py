@@ -84,10 +84,12 @@ class FakeModel(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         self.server.requests.append(json.loads(self.rfile.read(length)))
-        reply = self.server.script.pop(0) if self.server.script else [say("(script ran out)"), end()]
+        reply = (self.server.script.pop(0) if self.server.script
+                 else [say("(script ran out)"), end()])
 
         if isinstance(reply, Refuse):
-            body = json.dumps({"error": {"code": reply.code, "message": reply.message}}).encode()
+            body = json.dumps(
+                {"error": {"code": reply.code, "message": reply.message}}).encode()
             self.send_response(reply.code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -219,16 +221,19 @@ class CallInsideTheThinking(LoopTest):
 
     def test_a_call_the_model_only_thought_about_is_not_run(self):
         # It considered a tool, then answered instead. That answer stands.
-        self.script([think("Maybe " + xml("run_command", command="ls")), say("No need — it is 4."), end()])
+        self.script([think("Maybe " + xml("run_command", command="ls")),
+                     say("No need — it is 4."), end()])
         history, sink = self.turn("what is 2+2?")
         self.assertEqual(sink.tools, [])
         self.assertEqual(history[-1]["content"], "No need — it is 4.")
 
     def test_json_tool_call_and_missing_closing_tag_are_recovered(self):
         self.write("a.txt", "hi")
+        json_call = '<tool_call>{"name": "list_files", "arguments": {"path": "."}}</tool_call>'
+        unclosed = "<tool_call><function=read_file><parameter=path>a.txt</parameter></function>"
         self.script(
-            [think('Checking.\n<tool_call>{"name": "list_files", "arguments": {"path": "."}}</tool_call>'), end()],
-            [think("Reading.\n<tool_call><function=read_file><parameter=path>a.txt</parameter></function>"), end()],
+            [think(f"Checking.\n{json_call}"), end()],
+            [think(f"Reading.\n{unclosed}"), end()],
             [say("Saw hi."), end()],
         )
         history, sink = self.turn("read a.txt")
@@ -558,8 +563,9 @@ def tiny_png(rgb=(200, 30, 30), side=8):
     def chunk(kind, data):
         return (struct.pack(">I", len(data)) + kind + data
                 + struct.pack(">I", zlib.crc32(kind + data) & 0xffffffff))
-    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", side, side, 8, 2, 0, 0, 0))
-            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", side, side, 8, 2, 0, 0, 0))
+    idat = chunk(b"IDAT", zlib.compress(raw))
+    return b"\x89PNG\r\n\x1a\n" + ihdr + idat + chunk(b"IEND", b"")
 
 
 class Pictures(LoopTest):
@@ -583,7 +589,8 @@ class Pictures(LoopTest):
         self.assertIn("view_image", self.tool_names(0))
         result = next(m for m in self.sent(1) if m["role"] == "tool")
         self.assertEqual(result["content"][0]["type"], "text")
-        self.assertTrue(result["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
+        url = result["content"][1]["image_url"]["url"]
+        self.assertTrue(url.startswith("data:image/png;base64,"))
         self.assertEqual(history[-1]["content"], "It is red.")
         saved = next(m for m in history if m["role"] == "tool")
         self.assertEqual(saved["image"], path, "the session keeps the path, not the pixels")
@@ -623,7 +630,8 @@ class Pictures(LoopTest):
         agent.run(history, "what color?", self.config(), Watcher(), images=[path])
         first_user = self.sent(0)[1]
         self.assertEqual(first_user["content"][0]["type"], "text")
-        self.assertTrue(first_user["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
+        url = first_user["content"][1]["image_url"]["url"]
+        self.assertTrue(url.startswith("data:image/png;base64,"))
         self.assertEqual(history[0]["images"], [path], "session keeps paths, not base64")
 
         agent.run(history, "thanks", self.config(), Watcher())

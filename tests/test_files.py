@@ -446,8 +446,10 @@ class Email(TempStateTest):
 
     def send(self, allow=True, **args):
         sink = Recorder(allow=allow)
-        args = {"to": "someone@example.com", "subject": "Photos", "body": "Here they are.", **args}
-        return tools.send_email(args, self.cfg(approve_commands="never", approve_files="never"), sink), sink
+        args = {"to": "someone@example.com", "subject": "Photos",
+                "body": "Here they are.", **args}
+        cfg = self.cfg(approve_commands="never", approve_files="never")
+        return tools.send_email(args, cfg, sink), sink
 
     def test_it_asks_every_time_whatever_the_settings(self):
         result, sink = self.send(allow=True)

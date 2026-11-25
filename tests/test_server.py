@@ -471,8 +471,9 @@ class OtherWebsites(TempStateTest):
         super().tearDown()
 
     def post(self, path, body, **headers):
-        request = urllib.request.Request(self.url + path, data=json.dumps(body).encode(),
-                                         headers={"Content-Type": "application/json", **headers})
+        request = urllib.request.Request(
+            self.url + path, data=json.dumps(body).encode(),
+            headers={"Content-Type": "application/json", **headers})
         try:
             with urllib.request.urlopen(request) as response:
                 return response.status, json.load(response)
@@ -629,7 +630,8 @@ class UploadsCapabilitiesAndTLS(TempStateTest):
             self.assertEqual(resp.read(), png)
 
         # Base64 JSON upload works too; non-image is refused cleanly.
-        b64_body = json.dumps({"data": "data:image/png;base64," + base64.b64encode(png).decode()}).encode()
+        encoded = "data:image/png;base64," + base64.b64encode(png).decode()
+        b64_body = json.dumps({"data": encoded}).encode()
         req2 = urllib.request.Request(
             self.url + "/api/uploads", data=b64_body,
             headers={"Content-Type": "application/json"})

@@ -1341,7 +1341,8 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(raw_images, list):
             return self.send(400, {"error": "images must be a list"})
         if len(raw_images) > agent.PICTURES_PER_TURN:
-            return self.send(400, {"error": f"at most {agent.PICTURES_PER_TURN} images per message"})
+            return self.send(
+                400, {"error": f"at most {agent.PICTURES_PER_TURN} images per message"})
         if not message and not raw_images:
             return self.send(400, {"error": "empty message"})
 

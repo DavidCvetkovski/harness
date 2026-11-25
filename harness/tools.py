@@ -1191,7 +1191,8 @@ def find_files(args, cfg, sink):
     raw_folder = args.get("folder", "")
     folder = resolve(raw_folder or "~", cfg)
     if not os.path.isdir(folder):
-        return f"Error: not a folder: {folder}{_missing_hint(raw_folder, folder, cfg, want_dir=True)}"
+        hint = _missing_hint(raw_folder, folder, cfg, want_dir=True)
+        return f"Error: not a folder: {folder}{hint}"
     folders = args.get("kind", "").strip().lower().startswith("folder")
     pattern = wanted.lower() if any(mark in wanted for mark in "*?[") else ""
     words = wanted.lower().split()
@@ -1234,7 +1235,8 @@ def find_files(args, cfg, sink):
                   else f"{size / 1e3:.0f} KB, " if size >= 1000 else f"{size} bytes, ")
         lines.append(f"{path}  ({weight}changed {when})")
     if len(found) > FIND_SHOWN:
-        lines.append(f"... and {len(found) - FIND_SHOWN} more — give more of the name to narrow it")
+        lines.append(f"... and {len(found) - FIND_SHOWN} more — "
+                     "give more of the name to narrow it")
     if cut_short:
         lines.append(f"(stopped after {FIND_SECONDS}s, so there may be more — "
                      "search a smaller folder to be sure)")
@@ -1286,7 +1288,8 @@ def search_in_files(args, cfg, sink):
     default_root = cfg.get("project_dir") or "~"
     target = resolve(raw_folder or default_root, cfg)
     if not os.path.exists(target):
-        return f"Error: not found: {target}{_missing_hint(raw_folder, target, cfg, want_dir=True)}"
+        hint = _missing_hint(raw_folder, target, cfg, want_dir=True)
+        return f"Error: not found: {target}{hint}"
     if is_secret(target):
         return f"Error: refusing to search inside a credentials folder: {target}"
 
@@ -1298,7 +1301,8 @@ def search_in_files(args, cfg, sink):
     except re.error:
         regex = re.compile(re.escape(pattern), flags)
 
-    project = os.path.realpath(os.path.expanduser(cfg.get("project_dir") or "")) if cfg.get("project_dir") else ""
+    proj_cfg = cfg.get("project_dir") or ""
+    project = os.path.realpath(os.path.expanduser(proj_cfg)) if proj_cfg else ""
 
     def label_for(path):
         if project and _under(os.path.realpath(path), project):
@@ -1351,7 +1355,8 @@ def search_in_files(args, cfg, sink):
               f"for {pattern!r}:")
     out = [header] + hits
     if truncated_hits:
-        out.append(f"... (capped at {SEARCH_MATCHES} matches — narrow `pattern`, `folder`, or `file_pattern`)")
+        out.append(f"... (capped at {SEARCH_MATCHES} matches — "
+                   "narrow `pattern`, `folder`, or `file_pattern`)")
     if cut_short:
         out.append(f"(stopped after {SEARCH_SECONDS}s — search a smaller folder to be sure)")
     return "\n".join(out)
@@ -1465,7 +1470,8 @@ def view_image(args, cfg, sink):
     with open(path, "rb") as handle:
         kind = _image_kind(handle.read(16))
     if not kind:
-        return f"Error: {path} is not an image this can show (PNG, JPEG, HEIC, GIF, WebP, TIFF)."
+        return (f"Error: {path} is not an image this can show "
+                "(PNG, JPEG, HEIC, GIF, WebP, TIFF).")
     if not image_url(path):
         return f"Error: {path} could not be opened as an image."
     width, height = _dimensions(path)
@@ -1495,16 +1501,20 @@ on run argv
     set recipientCount to (item 4 of argv) as number
     tell application "Mail"
         if (count of accounts) is 0 then error "NO_ACCOUNT"
-        set theMessage to make new outgoing message with properties {subject:theSubject, content:theBody & return & return, visible:false}
+        set theMessage to make new outgoing message with properties {visible:false}
+        set subject of theMessage to theSubject
+        set content of theMessage to theBody & return & return
         tell theMessage
             repeat with i from 5 to (4 + recipientCount)
-                make new to recipient at end of to recipients with properties {address:(item i of argv)}
+                set addr to item i of argv
+                make new to recipient at end of to recipients with properties {address:addr}
             end repeat
         end tell
         repeat with i from (5 + recipientCount) to (count of argv)
             set theFile to (POSIX file (item i of argv)) as alias
             tell content of theMessage
-                make new attachment with properties {file name:theFile} at after the last paragraph
+                set attProps to {file name:theFile}
+                make new attachment with properties attProps at after the last paragraph
             end tell
         end repeat
         delay settleSeconds
@@ -1542,7 +1552,8 @@ def attachment_paths(value, cfg):
 
 
 def send_email(args, cfg, sink):
-    recipients = [part.strip() for part in re.split(r"[,;\s]+", args.get("to", "")) if part.strip()]
+    recipients = [part.strip() for part in re.split(r"[,;\s]+", args.get("to", ""))
+                  if part.strip()]
     subject = args.get("subject", "").strip()
     body = args.get("body", "")
     if not recipients:
@@ -1568,7 +1579,8 @@ def send_email(args, cfg, sink):
         lines.append(f"    | ... {len(body.splitlines()) - 8} more lines")
     if files:
         lines.append("")
-        lines += [f"  ATTACH   {path}  ({os.path.getsize(path) / 1e6:.1f} MB)" for path in files]
+        lines += [f"  ATTACH   {path}  ({os.path.getsize(path) / 1e6:.1f} MB)"
+                  for path in files]
     if total > 20e6:
         lines.append(f"\n  {total / 1e6:.0f} MB in all — over what most mail servers accept"
                      "\n  unless Mail Drop is on for this account.")

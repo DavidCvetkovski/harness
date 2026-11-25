@@ -140,7 +140,8 @@ class PageText(FetchTest):
 
     @unittest.skipUnless(shutil.which("osascript"), "PDF text extraction needs macOS")
     def test_a_pdf_comes_back_as_its_words(self):
-        self.site.pages["/cv.pdf"] = ("application/pdf", minimal_pdf(["Jane Doe", "ML engineer"]))
+        pdf = minimal_pdf(["Jane Doe", "ML engineer"])
+        self.site.pages["/cv.pdf"] = ("application/pdf", pdf)
         result, _ = self.fetch("/cv.pdf")
         self.assertIn("Jane Doe", result)
         self.assertIn("ML engineer", result)
