@@ -1,0 +1,525 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04A55F2C39DD199BC432E5F1 /* APIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E249DAB1F2BAAA6B8958ABB7 /* APIModelsTests.swift */; };
+		0AD9FFC35C2E46FAF24ED903 /* DemoHarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8EDCE151902B96E1A84684E /* DemoHarnessClient.swift */; };
+		12CB9D80AC5B630CD4BB1576 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D3CCD3037EC4E1C9C57B75 /* RootView.swift */; };
+		29086375504D5CA84ECD5560 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E646B7C925D4EA2C38BAF7D2 /* Assets.xcassets */; };
+		43A3EA0B8AC9C781873A6548 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9563D6340CEED5374E186C8 /* AppStore.swift */; };
+		535D2F5BB258FCDAB4243C78 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE591AEF0E92232DBEC2A20 /* ConnectView.swift */; };
+		5F0295D2EC8F5143E02EFB65 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 099B2B08A217E2E6B11A7126 /* SettingsSheet.swift */; };
+		5FF71C02B68407395FD66D62 /* MainChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57B4D55F9D3B8FB98431B679 /* MainChatView.swift */; };
+		6554DBD6147718898BBBC9F9 /* HarnessApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B24CE3F4DE2EA196084CA586 /* HarnessApp.swift */; };
+		7309B4663BF12F8DCEBD41E9 /* URLNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 675BD172258592C208C765B2 /* URLNormalizerTests.swift */; };
+		75F34BE8A3BFDACA1C70ACE1 /* SessionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9737E2148DBEF0ED82759835 /* SessionsSheet.swift */; };
+		85D32C11B479E5EB14EF85B9 /* MessageRowViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5FA715EB57788EED8BB04FF /* MessageRowViews.swift */; };
+		948D3CD89C39698E7D05C9F3 /* HarnessTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73755BCCF547B635D33A35D8 /* HarnessTheme.swift */; };
+		96CA5A33E87310BB6253D7AA /* SSEParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8772180E109701CFC7037379 /* SSEParser.swift */; };
+		A2CE94408EF71E3FA534F322 /* QRScannerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28EBF8AF9442411F2EF9C8EF /* QRScannerSheet.swift */; };
+		AB3D631E0EBB64D7C7947161 /* KeychainStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13FB55B13FFFB1F1B0E4E0C /* KeychainStore.swift */; };
+		B7468A17840F275E6A59DF84 /* HarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B9A4DD6A94B088270495924 /* HarnessClient.swift */; };
+		BF78EDBFD7E1D8464283ABC7 /* APIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A61EF26A26BFA5555F203A4 /* APIModels.swift */; };
+		D5DF2447B6AC379D53772FAA /* SSEParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9A8C86749DC10A626C89D6 /* SSEParserTests.swift */; };
+		FADA492647BC7F4137625264 /* DemoAndStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3FDA24D75EE141E8D65A5F /* DemoAndStoreTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		0C32CD341DCF8D856B532BA7 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 632666F4A8537121A1E942DC /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9CAE8F41437D5C28E2B50B85;
+			remoteInfo = Harness;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		099B2B08A217E2E6B11A7126 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
+		0B9A4DD6A94B088270495924 /* HarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessClient.swift; sourceTree = "<group>"; };
+		28EBF8AF9442411F2EF9C8EF /* QRScannerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QRScannerSheet.swift; sourceTree = "<group>"; };
+		3A61EF26A26BFA5555F203A4 /* APIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModels.swift; sourceTree = "<group>"; };
+		3E3FDA24D75EE141E8D65A5F /* DemoAndStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoAndStoreTests.swift; sourceTree = "<group>"; };
+		57B4D55F9D3B8FB98431B679 /* MainChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainChatView.swift; sourceTree = "<group>"; };
+		675BD172258592C208C765B2 /* URLNormalizerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = URLNormalizerTests.swift; sourceTree = "<group>"; };
+		73755BCCF547B635D33A35D8 /* HarnessTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessTheme.swift; sourceTree = "<group>"; };
+		8466A20DEC0BB4C1210F292E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8772180E109701CFC7037379 /* SSEParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParser.swift; sourceTree = "<group>"; };
+		9737E2148DBEF0ED82759835 /* SessionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsSheet.swift; sourceTree = "<group>"; };
+		9898A7D32835A9381715ED9A /* HarnessTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HarnessTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F9A8C86749DC10A626C89D6 /* SSEParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSEParserTests.swift; sourceTree = "<group>"; };
+		A13FB55B13FFFB1F1B0E4E0C /* KeychainStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainStore.swift; sourceTree = "<group>"; };
+		A9563D6340CEED5374E186C8 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
+		B24CE3F4DE2EA196084CA586 /* HarnessApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HarnessApp.swift; sourceTree = "<group>"; };
+		BFE591AEF0E92232DBEC2A20 /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
+		D3E473950CF7C898DE998767 /* Harness.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Harness.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D5FA715EB57788EED8BB04FF /* MessageRowViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRowViews.swift; sourceTree = "<group>"; };
+		D7D3CCD3037EC4E1C9C57B75 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		D8EDCE151902B96E1A84684E /* DemoHarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarnessClient.swift; sourceTree = "<group>"; };
+		E249DAB1F2BAAA6B8958ABB7 /* APIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelsTests.swift; sourceTree = "<group>"; };
+		E646B7C925D4EA2C38BAF7D2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		4A7A3BDE393EFC0D91231D81 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				73755BCCF547B635D33A35D8 /* HarnessTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		4CFCB8468D5E38AFFA81D60F /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				BFE591AEF0E92232DBEC2A20 /* ConnectView.swift */,
+				57B4D55F9D3B8FB98431B679 /* MainChatView.swift */,
+				D5FA715EB57788EED8BB04FF /* MessageRowViews.swift */,
+				28EBF8AF9442411F2EF9C8EF /* QRScannerSheet.swift */,
+				D7D3CCD3037EC4E1C9C57B75 /* RootView.swift */,
+				9737E2148DBEF0ED82759835 /* SessionsSheet.swift */,
+				099B2B08A217E2E6B11A7126 /* SettingsSheet.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		5A46B0D24AB7DF64B93F488B = {
+			isa = PBXGroup;
+			children = (
+				CEE945B9CB6BEBD18A0710AB /* Harness */,
+				826CD4117FCD4C5B58632913 /* HarnessTests */,
+				8B9F84DC775F556DAE85C788 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		826CD4117FCD4C5B58632913 /* HarnessTests */ = {
+			isa = PBXGroup;
+			children = (
+				E249DAB1F2BAAA6B8958ABB7 /* APIModelsTests.swift */,
+				3E3FDA24D75EE141E8D65A5F /* DemoAndStoreTests.swift */,
+				9F9A8C86749DC10A626C89D6 /* SSEParserTests.swift */,
+				675BD172258592C208C765B2 /* URLNormalizerTests.swift */,
+			);
+			path = HarnessTests;
+			sourceTree = "<group>";
+		};
+		8B9F84DC775F556DAE85C788 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D3E473950CF7C898DE998767 /* Harness.app */,
+				9898A7D32835A9381715ED9A /* HarnessTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		917CB2DF5F537D55A0E92862 /* State */ = {
+			isa = PBXGroup;
+			children = (
+				A9563D6340CEED5374E186C8 /* AppStore.swift */,
+			);
+			path = State;
+			sourceTree = "<group>";
+		};
+		CEE945B9CB6BEBD18A0710AB /* Harness */ = {
+			isa = PBXGroup;
+			children = (
+				E646B7C925D4EA2C38BAF7D2 /* Assets.xcassets */,
+				B24CE3F4DE2EA196084CA586 /* HarnessApp.swift */,
+				8466A20DEC0BB4C1210F292E /* Info.plist */,
+				DC2966E332794E1CAA2635B5 /* Models */,
+				E45C9CEFF2581560FC23CD62 /* Networking */,
+				917CB2DF5F537D55A0E92862 /* State */,
+				4A7A3BDE393EFC0D91231D81 /* Theme */,
+				4CFCB8468D5E38AFFA81D60F /* Views */,
+			);
+			path = Harness;
+			sourceTree = "<group>";
+		};
+		DC2966E332794E1CAA2635B5 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				3A61EF26A26BFA5555F203A4 /* APIModels.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E45C9CEFF2581560FC23CD62 /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				D8EDCE151902B96E1A84684E /* DemoHarnessClient.swift */,
+				0B9A4DD6A94B088270495924 /* HarnessClient.swift */,
+				A13FB55B13FFFB1F1B0E4E0C /* KeychainStore.swift */,
+				8772180E109701CFC7037379 /* SSEParser.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		9CAE8F41437D5C28E2B50B85 /* Harness */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C6F05FE989F73732C255F5CA /* Build configuration list for PBXNativeTarget "Harness" */;
+			buildPhases = (
+				093CFC9C0B64433157F91DE8 /* Sources */,
+				8FEB3F608FCC41A1DC444FC3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Harness;
+			packageProductDependencies = (
+			);
+			productName = Harness;
+			productReference = D3E473950CF7C898DE998767 /* Harness.app */;
+			productType = "com.apple.product-type.application";
+		};
+		D3F4CD28060BA8AF31CBC340 /* HarnessTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A150339E1BCB4CEBF06194A2 /* Build configuration list for PBXNativeTarget "HarnessTests" */;
+			buildPhases = (
+				4667EA076337386947A908EC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BD1CACAC25D6ECC87D6D5A8F /* PBXTargetDependency */,
+			);
+			name = HarnessTests;
+			packageProductDependencies = (
+			);
+			productName = HarnessTests;
+			productReference = 9898A7D32835A9381715ED9A /* HarnessTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		632666F4A8537121A1E942DC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					9CAE8F41437D5C28E2B50B85 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = EFDC44680DE6372609389CE8 /* Build configuration list for PBXProject "Harness" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5A46B0D24AB7DF64B93F488B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8B9F84DC775F556DAE85C788 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				9CAE8F41437D5C28E2B50B85 /* Harness */,
+				D3F4CD28060BA8AF31CBC340 /* HarnessTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8FEB3F608FCC41A1DC444FC3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29086375504D5CA84ECD5560 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		093CFC9C0B64433157F91DE8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BF78EDBFD7E1D8464283ABC7 /* APIModels.swift in Sources */,
+				43A3EA0B8AC9C781873A6548 /* AppStore.swift in Sources */,
+				535D2F5BB258FCDAB4243C78 /* ConnectView.swift in Sources */,
+				0AD9FFC35C2E46FAF24ED903 /* DemoHarnessClient.swift in Sources */,
+				6554DBD6147718898BBBC9F9 /* HarnessApp.swift in Sources */,
+				B7468A17840F275E6A59DF84 /* HarnessClient.swift in Sources */,
+				948D3CD89C39698E7D05C9F3 /* HarnessTheme.swift in Sources */,
+				AB3D631E0EBB64D7C7947161 /* KeychainStore.swift in Sources */,
+				5FF71C02B68407395FD66D62 /* MainChatView.swift in Sources */,
+				85D32C11B479E5EB14EF85B9 /* MessageRowViews.swift in Sources */,
+				A2CE94408EF71E3FA534F322 /* QRScannerSheet.swift in Sources */,
+				12CB9D80AC5B630CD4BB1576 /* RootView.swift in Sources */,
+				96CA5A33E87310BB6253D7AA /* SSEParser.swift in Sources */,
+				75F34BE8A3BFDACA1C70ACE1 /* SessionsSheet.swift in Sources */,
+				5F0295D2EC8F5143E02EFB65 /* SettingsSheet.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4667EA076337386947A908EC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				04A55F2C39DD199BC432E5F1 /* APIModelsTests.swift in Sources */,
+				FADA492647BC7F4137625264 /* DemoAndStoreTests.swift in Sources */,
+				D5DF2447B6AC379D53772FAA /* SSEParserTests.swift in Sources */,
+				7309B4663BF12F8DCEBD41E9 /* URLNormalizerTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BD1CACAC25D6ECC87D6D5A8F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9CAE8F41437D5C28E2B50B85 /* Harness */;
+			targetProxy = 0C32CD341DCF8D856B532BA7 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		26A7E8C4A6E878110EB346AB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		3801847D37DBC7ABC9DE5931 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Harness/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davidcvetkovski.harness;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		710D9584F235CD31C13ABB0B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davidcvetkovski.harness.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Harness.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Harness";
+			};
+			name = Debug;
+		};
+		7738416D11E0E2BC18A32893 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davidcvetkovski.harness.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Harness.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Harness";
+			};
+			name = Release;
+		};
+		94B92EF382ECB9158B705277 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A694A26AFD9C264E01D3F604 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Harness/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.davidcvetkovski.harness;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A150339E1BCB4CEBF06194A2 /* Build configuration list for PBXNativeTarget "HarnessTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				710D9584F235CD31C13ABB0B /* Debug */,
+				7738416D11E0E2BC18A32893 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C6F05FE989F73732C255F5CA /* Build configuration list for PBXNativeTarget "Harness" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A694A26AFD9C264E01D3F604 /* Debug */,
+				3801847D37DBC7ABC9DE5931 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EFDC44680DE6372609389CE8 /* Build configuration list for PBXProject "Harness" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				26A7E8C4A6E878110EB346AB /* Debug */,
+				94B92EF382ECB9158B705277 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 632666F4A8537121A1E942DC /* Project object */;
+}
