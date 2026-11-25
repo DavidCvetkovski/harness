@@ -10,6 +10,7 @@
 		04A55F2C39DD199BC432E5F1 /* APIModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E249DAB1F2BAAA6B8958ABB7 /* APIModelsTests.swift */; };
 		0AD9FFC35C2E46FAF24ED903 /* DemoHarnessClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8EDCE151902B96E1A84684E /* DemoHarnessClient.swift */; };
 		12CB9D80AC5B630CD4BB1576 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7D3CCD3037EC4E1C9C57B75 /* RootView.swift */; };
+		1DB7B7FCAB5C2CCF7418AB9E /* PlatformSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6B335AC67EEDC14E1341244 /* PlatformSupport.swift */; };
 		22DBBE27D0338508C1C8808D /* FolderPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48FAD733304A3274F1367E77 /* FolderPickerSheet.swift */; };
 		29086375504D5CA84ECD5560 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E646B7C925D4EA2C38BAF7D2 /* Assets.xcassets */; };
 		3377964AD235B6C8513CE5FE /* ProseBlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D7D901A601999EC6CED0965 /* ProseBlocksView.swift */; };
@@ -31,6 +32,7 @@
 		D3AD9A82011E667B184DB6FD /* StepsGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03246B579B146F7C1F91DC77 /* StepsGroupView.swift */; };
 		D5DF2447B6AC379D53772FAA /* SSEParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9A8C86749DC10A626C89D6 /* SSEParserTests.swift */; };
 		D7A557DBCD8AD481EDCAAF07 /* TranscriptPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAAA09F7CFDB1441727AA0F /* TranscriptPresentationTests.swift */; };
+		EB8625694BD16852C7CBA100 /* SessionDates.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9E26397B89D07FE7490A6E1 /* SessionDates.swift */; };
 		FADA492647BC7F4137625264 /* DemoAndStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3FDA24D75EE141E8D65A5F /* DemoAndStoreTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -73,6 +75,8 @@
 		D8EDCE151902B96E1A84684E /* DemoHarnessClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoHarnessClient.swift; sourceTree = "<group>"; };
 		E249DAB1F2BAAA6B8958ABB7 /* APIModelsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIModelsTests.swift; sourceTree = "<group>"; };
 		E646B7C925D4EA2C38BAF7D2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E6B335AC67EEDC14E1341244 /* PlatformSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformSupport.swift; sourceTree = "<group>"; };
+		F9E26397B89D07FE7490A6E1 /* SessionDates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDates.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -80,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				73755BCCF547B635D33A35D8 /* HarnessTheme.swift */,
+				E6B335AC67EEDC14E1341244 /* PlatformSupport.swift */,
 			);
 			path = Theme;
 			sourceTree = "<group>";
@@ -159,6 +164,7 @@
 			isa = PBXGroup;
 			children = (
 				3A61EF26A26BFA5555F203A4 /* APIModels.swift */,
+				F9E26397B89D07FE7490A6E1 /* SessionDates.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -274,10 +280,12 @@
 				AB3D631E0EBB64D7C7947161 /* KeychainStore.swift in Sources */,
 				5FF71C02B68407395FD66D62 /* MainChatView.swift in Sources */,
 				85D32C11B479E5EB14EF85B9 /* MessageRowViews.swift in Sources */,
+				1DB7B7FCAB5C2CCF7418AB9E /* PlatformSupport.swift in Sources */,
 				3377964AD235B6C8513CE5FE /* ProseBlocksView.swift in Sources */,
 				A2CE94408EF71E3FA534F322 /* QRScannerSheet.swift in Sources */,
 				12CB9D80AC5B630CD4BB1576 /* RootView.swift in Sources */,
 				96CA5A33E87310BB6253D7AA /* SSEParser.swift in Sources */,
+				EB8625694BD16852C7CBA100 /* SessionDates.swift in Sources */,
 				75F34BE8A3BFDACA1C70ACE1 /* SessionsSheet.swift in Sources */,
 				502AC2D7150BFC87780B3498 /* SettingsPages.swift in Sources */,
 				5F0295D2EC8F5143E02EFB65 /* SettingsSheet.swift in Sources */,

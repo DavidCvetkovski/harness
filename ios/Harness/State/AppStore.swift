@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import Observation
-import UIKit
 
 enum ApprovalStatus: Equatable {
     case pending
@@ -83,12 +82,16 @@ final class AppStore {
     var showSettingsSheet: Bool = false
     var showQRScanner: Bool = false
 
+    // Optional hooks for native platform notifications (e.g. macOS UNUserNotificationCenter).
+    @ObservationIgnored var onApprovalNeeded: ((ApprovalItem) -> Void)?
+    @ObservationIgnored var onTurnFinished: ((String) -> Void)?
+
     private(set) var client: HarnessAPI?
     private var streamTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
     private var activeTurnId: String?
     private var audioPlayer: AVAudioPlayer?
-    private let imageCache = NSCache<NSString, UIImage>()
+    private let imageCache = NSCache<NSString, PlatformImage>()
 
     private let defaults: UserDefaults
     private let urlKey = "harness.server.url"
@@ -493,13 +496,13 @@ final class AppStore {
         defer { isUploadingImage = false }
 
         // Resize & JPEG-compress on-device so cellular/Tailscale uploads stay snappy.
-        let prepared = Self.prepareJPEG(from: rawData, maxEdge: 1600, quality: 0.85) ?? rawData
+        let prepared = PlatformImageCodec.prepareJPEG(from: rawData, maxEdge: 1600, quality: 0.85) ?? rawData
         let mime = Self.detectMime(prepared)
         do {
             let uploaded = try await client.uploadImage(data: prepared, mimeType: mime)
             pendingAttachments.append(PendingAttachment(id: uploaded.id, url: uploaded.url, previewData: prepared))
-            if let uiImg = UIImage(data: prepared) {
-                imageCache.setObject(uiImg, forKey: uploaded.url as NSString)
+            if let img = PlatformImageCodec.image(from: prepared) {
+                imageCache.setObject(img, forKey: uploaded.url as NSString)
             }
         } catch {
             bannerMessage = "Image upload failed: \(error.localizedDescription)"
@@ -510,34 +513,16 @@ final class AppStore {
         pendingAttachments.removeAll { $0.id == id }
     }
 
-    func loadImage(path: String) async -> UIImage? {
+    func loadImage(path: String) async -> PlatformImage? {
         if let cached = imageCache.object(forKey: path as NSString) {
             return cached
         }
         guard let client, let data = try? await client.fetchData(path: path),
-              let image = UIImage(data: data) else {
+              let image = PlatformImageCodec.image(from: data) else {
             return nil
         }
         imageCache.setObject(image, forKey: path as NSString)
         return image
-    }
-
-    private static func prepareJPEG(from data: Data, maxEdge: CGFloat, quality: CGFloat) -> Data? {
-        guard let img = UIImage(data: data) else { return nil }
-        let size = img.size
-        let longest = max(size.width, size.height)
-        let target: CGSize
-        if longest > maxEdge && longest > 0 {
-            let scale = maxEdge / longest
-            target = CGSize(width: floor(size.width * scale), height: floor(size.height * scale))
-        } else {
-            target = size
-        }
-        let renderer = UIGraphicsImageRenderer(size: target)
-        let resized = renderer.image { _ in
-            img.draw(in: CGRect(origin: .zero, size: target))
-        }
-        return resized.jpegData(compressionQuality: quality)
     }
 
     private static func detectMime(_ data: Data) -> String {
@@ -717,6 +702,7 @@ final class AppStore {
         case .approval(let item):
             statusText = "Waiting for approval…"
             transcript.append(.approval(id: item.id, item: item, status: .pending))
+            onApprovalNeeded?(item)
 
         case .approvalResolved(let id, let allowed, let timedOut):
             let newStatus: ApprovalStatus = timedOut ? .timedOut : (allowed ? .allowed : .denied)
@@ -741,6 +727,12 @@ final class AppStore {
         case .done(let sid):
             if !sid.isEmpty { currentSessionId = sid }
             finishStreamingCleanup()
+            if case .assistant(_, let text, _) = transcript.last(where: {
+                if case .assistant = $0 { return true }
+                return false
+            }) {
+                onTurnFinished?(text)
+            }
         }
     }
 

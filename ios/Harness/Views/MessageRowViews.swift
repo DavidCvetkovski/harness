@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 // MARK: - Authenticated Thumbnail & Zoom Viewer
 
@@ -9,13 +8,13 @@ struct AuthenticatedImageView: View {
     let localData: Data?
     var height: CGFloat = 110
 
-    @State private var loaded: UIImage?
+    @State private var loaded: PlatformImage?
     @State private var showFullScreen = false
 
     var body: some View {
         Group {
             if let img = displayImage {
-                Image(uiImage: img)
+                Image(platformImage: img)
                     .resizable()
                     .scaledToFill()
                     .frame(width: height, height: height)
@@ -37,29 +36,42 @@ struct AuthenticatedImageView: View {
                 loaded = await store.loadImage(path: urlPath)
             }
         }
+        #if os(iOS)
         .fullScreenCover(isPresented: $showFullScreen) {
-            if let img = displayImage {
-                ZStack(alignment: .topTrailing) {
-                    Color.black.ignoresSafeArea()
-                    Image(uiImage: img)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Button {
-                        showFullScreen = false
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title)
-                            .foregroundStyle(.white.opacity(0.85))
-                            .padding(20)
-                    }
+            zoomViewer
+        }
+        #else
+        .sheet(isPresented: $showFullScreen) {
+            zoomViewer
+                .frame(minWidth: 640, minHeight: 480)
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private var zoomViewer: some View {
+        if let img = displayImage {
+            ZStack(alignment: .topTrailing) {
+                Color.black.ignoresSafeArea()
+                Image(platformImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Button {
+                    showFullScreen = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .padding(20)
                 }
+                .buttonStyle(.plain)
             }
         }
     }
 
-    private var displayImage: UIImage? {
-        if let localData, let img = UIImage(data: localData) { return img }
+    private var displayImage: PlatformImage? {
+        if let localData, let img = PlatformImageCodec.image(from: localData) { return img }
         return loaded
     }
 }
@@ -402,7 +414,7 @@ struct AssistantTurnView: View {
             if !isStreaming && !text.isEmpty {
                 HStack(spacing: 14) {
                     Button {
-                        UIPasteboard.general.string = text
+                        PlatformClipboard.copy(text)
                         copied = true
                         Task {
                             try? await Task.sleep(nanoseconds: 1_400_000_000)
@@ -469,7 +481,7 @@ struct CodeBlockCardView: View {
                     .foregroundStyle(HarnessTheme.dim)
                 Spacer()
                 Button {
-                    UIPasteboard.general.string = code
+                    PlatformClipboard.copy(code)
                     copied = true
                     Task {
                         try? await Task.sleep(nanoseconds: 1_400_000_000)

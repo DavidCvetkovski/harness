@@ -8,8 +8,8 @@
 
 set -euo pipefail
 
-LLAMA_BIN="$HOME/llm/llama.cpp/build/bin/llama-server"
-MODELS_DIR="$HOME/llm/models"
+LLAMA_BIN="${HARNESS_LLAMA_SERVER:-$HOME/llm/llama.cpp/build/bin/llama-server}"
+MODELS_DIR="${HARNESS_MODELS_DIR:-$HOME/llm/models}"
 CHOICE_FILE="$HOME/.harness/model"    # written when you pick a model in settings
 
 HOST=127.0.0.1
