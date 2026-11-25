@@ -321,6 +321,28 @@ textarea::placeholder{color:var(--faint)}
 .chip.on{border-color:var(--amber-dim);color:var(--amber)}
 .chip.on::before{background:var(--amber);box-shadow:0 0 6px rgba(232,163,61,.55)}
 #projbtn{margin-left:auto}
+.attach-strip{
+  max-width:var(--column);margin:0 auto;padding:10px 28px 0;
+  display:none;gap:8px;flex-wrap:wrap;align-items:center;
+}
+.attach-strip.on{display:flex}
+.athumb{
+  position:relative;width:54px;height:54px;border:1px solid var(--line-hot);
+  background:var(--ink);overflow:hidden;
+}
+.athumb img{width:100%;height:100%;object-fit:cover;display:block}
+.athumb button{
+  position:absolute;top:1px;right:1px;width:18px;height:18px;border:none;
+  background:rgba(11,13,12,.85);color:var(--text);font-size:12px;line-height:1;
+  cursor:pointer;
+}
+.athumb button:hover{color:var(--rust)}
+.turn-imgs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.turn-imgs img{
+  max-width:180px;max-height:140px;border:1px solid var(--line-hot);
+  object-fit:cover;display:block;
+}
+footer.drag{border-top-color:var(--amber)}
 
 /* ---------- overlays: history, settings, folders ---------- */
 .veil{
@@ -656,6 +678,7 @@ input:focus,.sheet textarea:focus,select:focus{border-color:var(--amber-dim)}
 <div id="log"><div class="wrap" id="stream"></div></div>
 
 <footer>
+  <div class="attach-strip" id="attach-strip"></div>
   <div class="composer">
     <textarea id="input" rows="1" placeholder="Ask anything…"></textarea>
     <button class="send" id="send">Send</button>
@@ -663,6 +686,8 @@ input:focus,.sheet textarea:focus,select:focus{border-color:var(--amber-dim)}
   </div>
   <div class="subbar">
     <button class="chip" id="thinking" title="Reason before answering — slower, better on hard questions">Think first</button>
+    <button class="chip" id="attachbtn" style="display:none" title="Attach a photo or screenshot (or paste/drop)">+ Image</button>
+    <input type="file" id="attachfile" accept="image/*" multiple style="display:none">
     <button class="chip" id="projbtn"></button>
   </div>
 </footer>
@@ -1079,6 +1104,17 @@ function tickThink(panel){
     `${panel.secs}s · ${panel.chars.toLocaleString()} chars`;
 }
 
+// A thought from a saved turn, drawn the way the live one ended up: sealed,
+// collapsed, openable. Reopening a chat used to show answers and tool calls
+// with none of the thinking that led to them.
+function pastThought(text){
+  const panel = thinkPanel();
+  panel.querySelector('.think-text').textContent = text;
+  panel.chars = text.length;
+  sealThink();
+  panel.querySelector('.meta').textContent = `${panel.chars.toLocaleString()} chars`;
+}
+
 // The turn has moved on to answering or to a tool. Keep the thought, out of
 // the way, still openable.
 function sealThink(){
@@ -1229,8 +1265,78 @@ $('#stop').onclick = () => {
   $('#stop').textContent = 'Stopping…';
 };
 
+// ---------- image attachments (vision models only) ----------
+let visionOn = false;
+let pendingImages = []; // [{id, url, preview}]
+
+function paintAttachments(){
+  const strip = $('#attach-strip');
+  strip.classList.toggle('on', pendingImages.length > 0);
+  strip.innerHTML = pendingImages.map((img, i) =>
+    `<div class="athumb"><img src="${esc(img.preview || img.url)}" alt="">
+       <button type="button" data-rm-img="${i}" title="Remove">×</button></div>`
+  ).join('');
+  onClick('[data-rm-img]', el => {
+    pendingImages.splice(+el.dataset.rmImg, 1);
+    paintAttachments();
+  });
+}
+
+async function addImageFiles(fileList){
+  if (!visionOn || !fileList || !fileList.length) return;
+  for (const file of fileList){
+    if (!file.type.startsWith('image/') && !/\.(heic|heif|png|jpe?g|webp|gif|tiff?)$/i.test(file.name))
+      continue;
+    if (pendingImages.length >= 6) break;
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    }).catch(() => null);
+    if (!dataUrl) continue;
+    try {
+      const res = await fetch('/api/uploads', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({data: dataUrl, filename: file.name || 'image.png'})
+      });
+      const info = await res.json();
+      if (!res.ok) throw new Error(info.error || res.statusText);
+      pendingImages.push({id: info.id, url: info.url, preview: dataUrl});
+      paintAttachments();
+    } catch (err) {
+      alert('Could not attach image: ' + (err.message || err));
+    }
+  }
+}
+
+$('#attachbtn').onclick = () => $('#attachfile').click();
+$('#attachfile').onchange = e => {
+  addImageFiles(e.target.files);
+  e.target.value = '';
+};
+input.addEventListener('paste', e => {
+  if (!visionOn) return;
+  const files = [...(e.clipboardData?.files || [])].filter(f => f.type.startsWith('image/'));
+  if (files.length){ e.preventDefault(); addImageFiles(files); }
+});
+const foot = $('footer');
+foot.addEventListener('dragover', e => {
+  if (!visionOn) return;
+  e.preventDefault();
+  foot.classList.add('drag');
+});
+foot.addEventListener('dragleave', () => foot.classList.remove('drag'));
+foot.addEventListener('drop', e => {
+  foot.classList.remove('drag');
+  if (!visionOn) return;
+  e.preventDefault();
+  addImageFiles(e.dataTransfer?.files);
+});
+
 async function ask(text){
-  if (busy || !text.trim()) return;
+  const imgs = pendingImages.slice();
+  if (busy || (!text.trim() && !imgs.length)) return;
   closeFind();
   // Send gives way to Stop rather than sitting next to it greyed out — on a
   // phone the two together left the composer no room.
@@ -1239,9 +1345,13 @@ async function ask(text){
   currentTurn = Math.random().toString(36).slice(2, 14);
   turnAbort = new AbortController();
   $('#stop').style.display = ''; $('#stop').textContent = 'Stop';
-  if (!sessionId) $('#title').textContent = text.slice(0, 70);
-  turn('user', render(text));
+  if (!sessionId) $('#title').textContent = (text.trim() || '(image)').slice(0, 70);
+  const imgHtml = imgs.length
+    ? `<div class="turn-imgs">${imgs.map(i => `<img src="${esc(i.preview || i.url)}" alt="">`).join('')}</div>`
+    : '';
+  turn('user', imgHtml + (text.trim() ? render(text) : ''));
   input.value = ''; input.style.height = 'auto';
+  pendingImages = []; paintAttachments();
 
   let body = null, card = null, buffer = '', finished = false, handedOff = false;
   const asked = [];
@@ -1355,6 +1465,7 @@ async function ask(text){
       method: 'POST', headers: {'Content-Type': 'application/json'},
       signal: turnAbort.signal,
       body: JSON.stringify({session_id: sessionId, message: text,
+                            images: imgs.map(i => i.id),
                             turn_id: currentTurn, thinking: thinkOn()})
     });
     if (!res.ok){
@@ -1857,16 +1968,23 @@ async function openSession(id){
   for (const m of data.messages){
     if (m.role === 'user'){
       pending = [];
-      turn('user', render(m.content || ''));
-    } else if (m.role === 'assistant' && m.content){
-      pending = [];
-      turn('assistant', render(m.content));
-    } else if (m.role === 'assistant' && m.tool_calls){
-      pending = m.tool_calls.map(c => {
-        let args = {};
-        try { args = JSON.parse(c.function.arguments || '{}'); } catch {}
-        return toolCard(c.function.name, args);
-      });
+      const urls = m.image_urls || [];
+      const thumbs = urls.length
+        ? `<div class="turn-imgs">${urls.map(u => `<img src="${esc(u)}" alt="">`).join('')}</div>`
+        : '';
+      turn('user', thumbs + render(m.content || ''));
+    } else if (m.role === 'assistant'){
+      if (m.reasoning_content) pastThought(m.reasoning_content);
+      if (m.content){
+        pending = [];
+        turn('assistant', render(m.content));
+      } else if (m.tool_calls){
+        pending = m.tool_calls.map(c => {
+          let args = {};
+          try { args = JSON.parse(c.function.arguments || '{}'); } catch {}
+          return toolCard(c.function.name, args);
+        });
+      }
     } else if (m.role === 'tool'){
       toolOutput(pending.shift(), m.content || '');
     }
@@ -2038,6 +2156,8 @@ async function health(){
     const d = await get('/api/models');
     name = d.live || '';
     up = true;
+    visionOn = !!(d.loaded && d.vision);
+    $('#attachbtn').style.display = visionOn ? '' : 'none';
     $('#statustext').textContent = d.loaded ? (name || 'no model') : 'loading…';
   } catch {
     $('#statustext').textContent = 'server down';
@@ -2168,6 +2288,7 @@ const PERMS = [
   {key:'write_file',  name:'Create files',   desc:'Write new files. Always shows the contents and asks before saving.'},
   {key:'edit_file',   name:'Edit files',     desc:'Change existing files. Shows the exact change and asks first.'},
   {key:'web_search',  name:'Search the web', desc:'Look things up online when it needs current information.'},
+  {key:'send_email',  name:'Send email',     desc:'Send mail, with attachments, from the Mail app. Shows exactly what goes to whom and asks every time.'},
 ];
 
 function setTool(name, on){
@@ -2255,14 +2376,18 @@ function paintAccess(a, sys){
     </button>`).join('');
 
   $('#s-access').innerHTML =
-    a.mode === 'remote' ? `<div class="okbox" style="margin-top:11px">
-        <b>Working from anywhere.</b> Reachable over your private Tailscale
+    a.mode === 'remote' && (a.short || a.url) ? `<div class="okbox" style="margin-top:11px">
+        <b>Working from anywhere${a.tls ? ' (HTTPS)' : ''}.</b> Reachable over your private Tailscale
         network — including on cellular — and nothing else can see it.</div>
       <div class="note">On your phone, with Tailscale running and signed in to the
         same account, open:<br><br>
         <code style="color:var(--sage);font-size:12px">${esc(a.short || a.url)}</code><br><br>
         No key needed — Tailscale already verified the device. Add it to your home
         screen from the browser's share menu to get an app icon.</div>`
+    : a.mode === 'remote' ? `<div class="warn" style="margin-top:11px">
+        <b>Waiting for Tailscale.</b> Remote mode is on, and Harness is serving on
+        this Mac. It will attach to your tailnet automatically once Tailscale is
+        running.</div>`
     : a.mode === 'lan' ? `<div class="warn" style="margin-top:11px">
         <b>Home Wi-Fi only.</b> Anyone on this network with the link can run
         commands on your Mac. Fine at home, not on public Wi-Fi.</div>
@@ -2274,8 +2399,10 @@ function paintAccess(a, sys){
   onClick('[data-mode]', async el => {
     if (el.classList.contains('on')) return;
     const mode = el.dataset.mode;
-    if (mode === 'remote' && !sys.tailnet)
-      return alert('Tailscale is not running. Start it, then try again.');
+    if (mode === 'remote' && !sys.tailnet && !confirm(
+        'Tailscale is not running yet.\n\nSwitch to remote mode anyway so '
+        + 'Harness attaches automatically once Tailscale starts?'))
+      return;
 
     // Narrowing the mode can cut off the address this page is loaded from —
     // switching to "This Mac only" over Tailscale kills your own connection.

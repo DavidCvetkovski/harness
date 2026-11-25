@@ -19,7 +19,7 @@ import sys
 import time
 
 from . import config as settings
-from .server import APP_PROCESS, MODEL_HEALTH, alive, pids, rss_gb, shell
+from .server import APP_PROCESS, MODEL_HEALTH, OWN_CAFFEINATE, alive, pids, rss_gb, shell
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_SH = os.path.join(HERE, "model.sh")
@@ -41,7 +41,8 @@ def spawn(command, log_path):
     """
     os.makedirs(settings.BASE, exist_ok=True)
     with open(log_path, "w") as log:
-        subprocess.Popen(["caffeinate", "-i"] + command, stdout=log, stderr=log,
+        subprocess.Popen(["caffeinate", "-i"] + command,
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                          start_new_session=True, cwd=os.path.dirname(HERE))
 
 
@@ -84,8 +85,8 @@ def start_app(args):
               f"(pid {other[0]}); starting this one on :{args.port}")
 
     command = [sys.executable, "-m", "harness.server", "--port", str(args.port)]
-    for flag in ("remote", "lan", "no_browser"):
-        if getattr(args, flag):
+    for flag in ("remote", "lan", "tls", "no_browser"):
+        if getattr(args, flag, False):
             command.append("--" + flag.replace("_", "-"))
     spawn(command, APP_LOG)
 
@@ -146,7 +147,7 @@ def do_stop():
             with contextlib.suppress(OSError):
                 os.kill(pid, signal.SIGKILL)
 
-    for pid in pids("caffeinate -i"):
+    for pid in pids(OWN_CAFFEINATE):
         with contextlib.suppress(OSError):
             os.kill(pid, signal.SIGTERM)
 
@@ -194,6 +195,8 @@ def main():
                         help="Reachable from your phone anywhere, over Tailscale.")
     parser.add_argument("--lan", action="store_true",
                         help="Reachable on your local Wi-Fi.")
+    parser.add_argument("--tls", action="store_true",
+                        help="Serve HTTPS on the Tailscale listener using tailscale cert.")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--rotate-token", action="store_true",
                         help="Invalidate the current phone link and issue a new one.")
@@ -219,8 +222,8 @@ def main():
         start_model()
         from . import server
         sys.argv = ["harness"] + [f"--{f.replace('_', '-')}"
-                                  for f in ("remote", "lan", "no_browser")
-                                  if getattr(args, f)]
+                                  for f in ("remote", "lan", "tls", "no_browser")
+                                  if getattr(args, f, False)]
         sys.argv += ["--port", str(args.port)]
         server.main()
     elif args.command == "deps":

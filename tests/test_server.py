@@ -378,6 +378,33 @@ class DisconnectEndToEnd(TempStateTest):
                          ["ran it", "The answer."])
         self.assertEqual(done["approvals"], [])
 
+    def test_a_turn_that_fails_says_why_in_the_saved_chat(self):
+        def failing_run(history, message, cfg, sink):
+            history.append({"role": "user", "content": message})
+            sink.error("The model server stopped partway through the reply.")
+        server.agent.run = failing_run
+        sock, session_id = self.start_turn()
+        sock.close()                           # the phone has gone
+        deadline = time.monotonic() + 5
+        while self.session(session_id)["running"] and time.monotonic() < deadline:
+            time.sleep(0.1)
+        last = self.session(session_id)["messages"][-1]
+        self.assertEqual(last["role"], "assistant")
+        self.assertIn("stopped partway", last["content"])
+
+    def test_an_error_after_an_answer_adds_nothing(self):
+        def answered_then_warned(history, message, cfg, sink):
+            history.append({"role": "user", "content": message})
+            history.append({"role": "assistant", "content": "Half an answer"})
+            sink.error("The reply was cut off at its length limit.")
+        server.agent.run = answered_then_warned
+        sock, session_id = self.start_turn()
+        deadline = time.monotonic() + 5
+        while self.session(session_id)["running"] and time.monotonic() < deadline:
+            time.sleep(0.1)
+        sock.close()
+        self.assertEqual(self.session(session_id)["messages"][-1]["content"], "Half an answer")
+
     def test_a_second_message_waits_for_the_first(self):
         sock, session_id = self.start_turn()
         body = json.dumps({"message": "and?", "session_id": session_id}).encode()
@@ -404,6 +431,275 @@ class QuietRuns(unittest.TestCase):
         sink.token("x")
         sink.reasoning("y")
         sink.error("z")
+
+    def test_why_a_run_failed_is_kept(self):
+        sink = server.QuietSink()
+        sink.error("Cannot reach the model server")
+        self.assertEqual(sink.errors, ["Cannot reach the model server"])
+
+
+class OwnProcessesOnly(unittest.TestCase):
+
+    def test_stop_finds_harnesss_caffeinate_and_nobody_elses(self):
+        import re
+        for ours in ("caffeinate -i /Users/d/Developer/Harness/harness/model.sh",
+                     "caffeinate -i /opt/homebrew/bin/python3 -m harness.server --port 8420"):
+            self.assertTrue(re.search(server.OWN_CAFFEINATE, ours), ours)
+        for theirs in ("caffeinate -i -t 3600", "caffeinate -i ./record-review-video"):
+            self.assertFalse(re.search(server.OWN_CAFFEINATE, theirs), theirs)
+
+
+
+class OtherWebsites(TempStateTest):
+    """
+    A page on another site must not be able to drive Harness.
+
+    On 127.0.0.1 there is no token to stop it, so before this any page you
+    visited could switch approvals off and start a chat with one form post.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.httpd = server.Server(("127.0.0.1", 0), server.Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.port = self.httpd.server_address[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        super().tearDown()
+
+    def post(self, path, body, **headers):
+        request = urllib.request.Request(self.url + path, data=json.dumps(body).encode(),
+                                         headers={"Content-Type": "application/json", **headers})
+        try:
+            with urllib.request.urlopen(request) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as exc:
+            with exc:
+                return exc.code, json.load(exc)
+
+    def test_a_post_from_another_site_is_refused(self):
+        code, body = self.post("/api/config", {"approve_commands": "never"},
+                               Origin="https://evil.example")
+        self.assertEqual(code, 403)
+        self.assertEqual(server.settings.load_config()["approve_commands"], "always")
+
+    def test_the_browsers_own_word_is_taken_when_there_is_no_origin(self):
+        code, _ = self.post("/api/config", {"approve_commands": "never"},
+                            **{"Sec-Fetch-Site": "cross-site"})
+        self.assertEqual(code, 403)
+
+    def test_harnesss_own_page_is_let_through(self):
+        code, body = self.post("/api/config", {"temperature": 0.3},
+                               Origin=f"http://127.0.0.1:{self.port}")
+        self.assertEqual(code, 200)
+        self.assertEqual(body["temperature"], 0.3)
+
+    def test_a_rebound_host_name_is_refused(self):
+        # DNS rebinding: evil.example now points at 127.0.0.1, so the page is
+        # same-origin with Harness — but the Host header still says so.
+        request = urllib.request.Request(self.url + "/api/access",
+                                         headers={"Host": f"evil.example:{self.port}"})
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request)
+        caught.exception.close()
+        self.assertEqual(caught.exception.code, 403)
+
+    def test_a_malformed_export_is_answered(self):
+        request = urllib.request.Request(self.url + "/api/export/bad.id")
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(request, timeout=5)
+        caught.exception.close()
+        self.assertEqual(caught.exception.code, 404)
+
+
+class Names(unittest.TestCase):
+
+    def test_the_ways_harness_is_reached_are_allowed(self):
+        for host in ("127.0.0.1:8420", "localhost:8420", "[::1]:8420",
+                     "100.74.163.110:8420", "davids-macbook-air:8420",
+                     "davids-macbook-air.tail1234.ts.net:8420", "mac.local", None):
+            self.assertTrue(server.host_allowed(host), host)
+
+    def test_any_other_name_is_not(self):
+        for host in ("evil.example", "evil.example:8420", "127.0.0.1.nip.io", ""):
+            self.assertFalse(server.host_allowed(host), host)
+
+    def test_where_a_request_came_from(self):
+        same = {"Origin": "http://127.0.0.1:8420", "Host": "127.0.0.1:8420"}
+        self.assertFalse(server.cross_site(same))
+        self.assertFalse(server.cross_site({"Host": "127.0.0.1:8420"}))
+        for headers in ({"Origin": "https://evil.example", "Host": "127.0.0.1:8420"},
+                        {"Origin": "null", "Host": "127.0.0.1:8420"},
+                        {"Origin": "http://127.0.0.1:8080", "Host": "127.0.0.1:8420"},
+                        {"Sec-Fetch-Site": "cross-site", "Host": "127.0.0.1:8420"}):
+            self.assertTrue(server.cross_site(headers), headers)
+
+
+class RemoteResilience(TempStateTest):
+    """
+    --remote must stay alive on loopback if Tailscale is down, keep reporting
+    remote mode for relaunches, and attach the tailnet socket once it appears.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._saved_flags = (server.REMOTE, server.REQUIRE_TOKEN, server.SERVE_HOST,
+                             server.PORT, server.tailnet_address)
+
+    def tearDown(self):
+        (server.REMOTE, server.REQUIRE_TOKEN, server.SERVE_HOST,
+         server.PORT, server.tailnet_address) = self._saved_flags
+        super().tearDown()
+
+    def test_remote_mode_keeps_identity_and_hides_lan_when_tailscale_is_down(self):
+        server.REMOTE = True
+        server.REQUIRE_TOKEN = True
+        server.SERVE_HOST = ""
+        self.assertEqual(server.access_mode(), "remote")
+        self.assertEqual(server.phone_url(), "")
+
+    def test_tailnet_watcher_attaches_when_address_appears(self):
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+
+        addresses = iter(["", "127.0.0.1"])
+        server.REMOTE = True
+        server.REQUIRE_TOKEN = True
+        server.SERVE_HOST = ""
+        server.PORT = port
+        server.tailnet_address = lambda: next(addresses, "127.0.0.1")
+
+        active = server._attach_tailnet(port)
+        self.assertIsNone(active)
+        self.assertEqual(server.SERVE_HOST, "")
+
+        active = server._attach_tailnet(port, active)
+        self.assertIsNotNone(active)
+        try:
+            self.assertEqual(server.SERVE_HOST, "127.0.0.1")
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/access", timeout=3) as r:
+                self.assertEqual(json.load(r)["mode"], "remote")
+        finally:
+            active[1].shutdown()
+            active[1].server_close()
+
+
+class UploadsCapabilitiesAndTLS(TempStateTest):
+    """Image uploads, native iOS handshake/Bearer auth, and optional TLS."""
+
+    def setUp(self):
+        super().setUp()
+        self._saved_state = (server.REMOTE, server.REQUIRE_TOKEN, server.SERVE_HOST,
+                             server.TLS_WANTED, server.TLS_ACTIVE, server.TLS_CERT,
+                             server.TLS_KEY, server.agent.server_props, server.agent.run)
+        self.vision = True
+        server.agent.server_props = lambda: {"n_ctx": 32768, "vision": self.vision}
+        self.httpd = server.Server(("127.0.0.1", 0), server.Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.port = self.httpd.server_address[1]
+        self.url = f"http://127.0.0.1:{self.port}"
+
+    def tearDown(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+        (server.REMOTE, server.REQUIRE_TOKEN, server.SERVE_HOST,
+         server.TLS_WANTED, server.TLS_ACTIVE, server.TLS_CERT,
+         server.TLS_KEY, server.agent.server_props, server.agent.run) = self._saved_state
+        super().tearDown()
+
+    def test_upload_raw_and_base64_and_serve_back(self):
+        import base64
+        from .test_loop import tiny_png
+        png = tiny_png()
+
+        req = urllib.request.Request(
+            self.url + "/api/uploads", data=png,
+            headers={"Content-Type": "image/png"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            info = json.load(resp)
+        self.assertEqual(info["mime"], "image/png")
+        self.assertTrue(info["url"].startswith("/api/uploads/"))
+
+        with urllib.request.urlopen(self.url + info["url"], timeout=5) as resp:
+            self.assertEqual(resp.read(), png)
+
+        # Base64 JSON upload works too; non-image is refused cleanly.
+        b64_body = json.dumps({"data": "data:image/png;base64," + base64.b64encode(png).decode()}).encode()
+        req2 = urllib.request.Request(
+            self.url + "/api/uploads", data=b64_body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req2, timeout=5) as resp:
+            self.assertEqual(json.load(resp)["mime"], "image/png")
+
+        bad = json.dumps({"data": base64.b64encode(b"not an image").decode()}).encode()
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(urllib.request.Request(
+                self.url + "/api/uploads", data=bad,
+                headers={"Content-Type": "application/json"}), timeout=5)
+        caught.exception.close()
+        self.assertEqual(caught.exception.code, 400)
+
+    def test_chat_with_uploaded_image_and_vision_guard(self):
+        from .test_loop import tiny_png
+        png = tiny_png()
+        info = server.save_upload(png, "shot.png")
+
+        seen_images = []
+        def fake_run(history, message, cfg, sink, images=None):
+            user = {"role": "user", "content": message}
+            if images:
+                user["images"] = list(images)
+                seen_images.extend(images)
+            history.append(user)
+            history.append({"role": "assistant", "content": "Saw a red square."})
+        server.agent.run = fake_run
+
+        body = json.dumps({"message": "what is this?", "images": [info["id"]]}).encode()
+        req = urllib.request.Request(
+            self.url + "/api/chat", data=body,
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            raw = resp.read().decode()
+        self.assertIn("done", raw)
+        self.assertEqual(seen_images, [info["path"]])
+        sid = next(json.loads(line[6:])["session_id"] for line in raw.splitlines()
+                   if line.startswith("data: ") and '"session"' in line)
+        with urllib.request.urlopen(f"{self.url}/api/session/{sid}", timeout=5) as resp:
+            sess = json.load(resp)
+        self.assertEqual(sess["messages"][0]["image_urls"], [info["url"]])
+
+        # Refused when loaded model lacks vision
+        self.vision = False
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            urllib.request.urlopen(urllib.request.Request(
+                self.url + "/api/chat", data=body,
+                headers={"Content-Type": "application/json"}), timeout=5)
+        caught.exception.close()
+        self.assertEqual(caught.exception.code, 400)
+
+    def test_capabilities_bearer_auth_and_tls_fallback(self):
+        with urllib.request.urlopen(self.url + "/api/capabilities", timeout=5) as resp:
+            caps = json.load(resp)
+        self.assertEqual(caps["version"], 1)
+        self.assertTrue(caps["vision"])
+        self.assertIn("search_in_files", caps["tools"])
+
+        # TLS cert discovery + graceful HTTP fallback when missing
+        self.assertEqual(server.find_tls_certs(), ("", ""))
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.bind(("127.0.0.1", 0))
+        free_port = probe.getsockname()[1]
+        probe.close()
+        srv = server.make_tailnet_server("127.0.0.1", free_port)
+        try:
+            self.assertFalse(server.TLS_ACTIVE)
+        finally:
+            srv.server_close()
 
 
 if __name__ == "__main__":
