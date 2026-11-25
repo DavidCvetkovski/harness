@@ -176,6 +176,29 @@ class HistoryBudget(unittest.TestCase):
         # of a 32K window would leave the conversation a sliver.
         self.assertGreater(agent.history_budget({"max_tokens": 16000}, 32768), 50000)
 
+    def test_inline_base64_images_count_as_image_chars_not_raw_bytes(self):
+        # Regression: after for_model() expands an attached photo into a
+        # 400 KB base64 data URL, _size() must count IMAGE_CHARS rather than
+        # len(str(content)) — otherwise trim_history() drops the user's turn.
+        huge_data_url = "data:image/jpeg;base64," + ("A" * 400_000)
+        message = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "can you find these"},
+                {"type": "image_url", "image_url": {"url": huge_data_url}},
+            ],
+        }
+        self.assertLess(agent._size(message), agent.IMAGE_CHARS + 500)
+        kept = agent.trim_history([message], budget=55_000)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["role"], "user")
+
+    def test_single_oversized_user_message_is_never_dropped_to_empty(self):
+        history = [{"role": "user", "content": "x" * 60_000}]
+        kept = agent.trim_history(history, budget=10_000)
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["role"], "user")
+
 
 class ContextWindow(TempStateTest):
 

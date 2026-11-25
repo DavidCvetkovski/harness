@@ -423,10 +423,12 @@ def trim_history(history, budget=HISTORY_CHAR_BUDGET):
         return question + kept
 
     # Not even the question fits, so keep what is newest and drop the rest.
+    # Always keep at least one message so a single huge turn is never dropped
+    # down to an empty history (which templates reject with "No user query").
     kept = []
     for message in reversed(history):
         budget -= _size(message)
-        if budget < 0:
+        if budget < 0 and kept:
             break
         kept.append(message)
     kept.reverse()
@@ -444,8 +446,26 @@ IMAGE_CHARS = 3500
 
 def _size(message):
     """What a message costs the budget: its words, its thinking, and overhead."""
-    images = (1 if message.get("image") else 0) + len(message.get("images") or ())
-    return (len(str(message.get("content") or ""))
+    content = message.get("content")
+    if isinstance(content, list):
+        # After for_model(), images live inline as base64 data URLs inside
+        # content parts. Counting len(str(content)) treated one 300 KB photo
+        # as ~400,000 characters and made trim_history() drop the user's turn.
+        text_chars = 0
+        images = 0
+        for part in content:
+            if isinstance(part, dict) and (
+                part.get("type") == "image_url" or "image_url" in part
+            ):
+                images += 1
+            elif isinstance(part, dict) and "text" in part:
+                text_chars += len(str(part.get("text") or ""))
+            else:
+                text_chars += len(str(part))
+    else:
+        text_chars = len(str(content or ""))
+        images = (1 if message.get("image") else 0) + len(message.get("images") or ())
+    return (text_chars
             + len(str(message.get("reasoning_content") or ""))
             + IMAGE_CHARS * images + 200)
 
